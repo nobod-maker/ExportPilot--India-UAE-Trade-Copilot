@@ -25,6 +25,7 @@ def test_control_tower_audit_logging():
             risk_level="High",
             status="Pending Approval",
             deal_id=42,
+            user="priya",
             db_path=test_db,
         )
         assert event_id > 0
@@ -34,6 +35,20 @@ def test_control_tower_audit_logging():
         assert entry["action"] == "Test Action"
         assert entry["risk_level"] == "High"
         assert entry["deal_id"] == 42
+        assert entry["user"] == "priya"
+
+        # Test filtering by user
+        priya_logs = get_audit_logs(user="priya", db_path=test_db)
+        assert len(priya_logs) == 1
+        other_logs = get_audit_logs(user="other", db_path=test_db)
+        assert len(other_logs) == 0
+
+        # Test admin status update
+        from agent.tools import update_audit_log_status
+        ok = update_audit_log_status(event_id, "Approved by Administrator", "admin", db_path=test_db)
+        assert ok is True
+        updated = get_audit_logs(db_path=test_db)[0]
+        assert "Approved by Administrator" in updated["governance_status"]
 
 
 def test_risk_auditor_bad_deal():

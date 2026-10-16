@@ -344,10 +344,16 @@ def init_audit_db(db_path: Path | str = DEFAULT_DB_PATH) -> None:
                 reason TEXT NOT NULL,
                 risk_level TEXT NOT NULL CHECK(risk_level IN ('Low', 'Medium', 'High')),
                 governance_status TEXT NOT NULL,
-                deal_id INTEGER
+                deal_id INTEGER,
+                user TEXT DEFAULT 'system'
             )
             """
         )
+        # Migrate existing table if 'user' column is absent
+        try:
+            cursor.execute("ALTER TABLE control_tower_audit_logs ADD COLUMN user TEXT DEFAULT 'system'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         conn.commit()
     finally:
         conn.close()
@@ -359,6 +365,7 @@ def audit_log_event(
     risk_level: str = "Low",
     status: str = "Completed",
     deal_id: Optional[int] = None,
+    user: str = "system",
     db_path: Path | str = DEFAULT_DB_PATH,
 ) -> int:
     """Record a governance and agent decision event to the FedAI Control Tower log."""
@@ -370,10 +377,10 @@ def audit_log_event(
         cursor.execute(
             """
             INSERT INTO control_tower_audit_logs (
-                timestamp, action, reason, risk_level, governance_status, deal_id
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                timestamp, action, reason, risk_level, governance_status, deal_id, user
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (now_ts, action, reason, risk_level, status, deal_id),
+            (now_ts, action, reason, risk_level, status, deal_id, user),
         )
         conn.commit()
         return cursor.lastrowid or 0
@@ -381,16 +388,54 @@ def audit_log_event(
         conn.close()
 
 
-def get_audit_logs(limit: int = 50, db_path: Path | str = DEFAULT_DB_PATH) -> List[Dict[str, Any]]:
-    """Retrieve audit history from the FedAI Control Tower."""
+def get_audit_logs(
+    limit: int = 50,
+    user: Optional[str] = None,
+    db_path: Path | str = DEFAULT_DB_PATH,
+) -> List[Dict[str, Any]]:
+    """Retrieve audit history from the FedAI Control Tower, optionally filtered by user."""
     init_audit_db(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM control_tower_audit_logs ORDER BY id DESC LIMIT ?", (limit,))
+        if user:
+            cursor.execute(
+                "SELECT * FROM control_tower_audit_logs WHERE user = ? ORDER BY id DESC LIMIT ?",
+                (user, limit),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM control_tower_audit_logs ORDER BY id DESC LIMIT ?",
+                (limit,),
+            )
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def update_audit_log_status(
+    log_id: int,
+    new_status: str,
+    admin_user: str,
+    db_path: Path | str = DEFAULT_DB_PATH,
+) -> bool:
+    """Update the governance status of an audit log entry (Admin action)."""
+    init_audit_db(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE control_tower_audit_logs
+            SET governance_status = ?
+            WHERE id = ?
+            """,
+            (f"{new_status} (by {admin_user})", log_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
     finally:
         conn.close()
 

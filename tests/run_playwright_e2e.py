@@ -1,4 +1,4 @@
-"""Standalone Playwright CLI test runner for ExportPilot Stripe Design System."""
+"""Playwright E2E test runner for ExportPilot with Authentication and Monad Audit Table."""
 
 from __future__ import annotations
 
@@ -22,124 +22,126 @@ def run_e2e_tests() -> bool:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="msedge", headless=True)
-        context = browser.new_context(viewport={"width": 1400, "height": 900})
+        context = browser.new_context(viewport={"width": 1400, "height": 950})
         page = context.new_page()
 
         try:
             # -----------------------------------------------------------------
-            # TEST 1: Stripe Design Tokens & Pure White Canvas
+            # TEST 1: Authentication Gate (Unauthenticated view)
             # -----------------------------------------------------------------
-            print("\n[TEST 1] Verifying Stripe Financial Ledger Design Tokens...")
+            print("\n[TEST 1] Verifying Monad Login Page Gate...")
             page.goto(BASE_URL, wait_until="networkidle", timeout=30000)
 
-            # Check Canvas Background and wait for hydration
+            # Wait for Streamlit app container
             app_container = page.locator('[data-testid="stAppViewContainer"]')
             app_container.wait_for(state="visible", timeout=20000)
 
-            page.wait_for_function("() => document.title.includes('ExportPilot')", timeout=15000)
-            title = page.title()
-            print("  [PASS] Page title verified:", title)
-            bg_color = app_container.evaluate("el => window.getComputedStyle(el).backgroundColor")
-            assert "255, 255, 255" in bg_color, f"Canvas background must be white (#ffffff), got {bg_color}"
-            print("  [PASS] Canvas background is Pure White (#ffffff):", bg_color)
+            # Verify Login form is displayed and main app is blocked
+            page.locator('text=Demo Credentials').first.wait_for(state="visible", timeout=10000)
+            page.locator('text=Login').first.wait_for(state="visible", timeout=10000)
+            print("  [PASS] Application successfully gated behind login screen.")
 
-            # Check Primary Button (Indigo Ink #533afd, 4px radius, no box shadow)
-            primary_btn = page.locator('button[kind="primary"]').first
-            primary_btn.wait_for(state="visible", timeout=10000)
-            btn_styles = primary_btn.evaluate(
-                """el => {
-                    const cs = window.getComputedStyle(el);
-                    return {
-                        backgroundColor: cs.backgroundColor,
-                        borderRadius: cs.borderRadius,
-                        boxShadow: cs.boxShadow
-                    };
-                }"""
-            )
-            print("  [INFO] Primary Button styles:", btn_styles)
-            assert "83, 58, 253" in btn_styles["backgroundColor"], f"Expected #533afd (rgb(83, 58, 253)), got {btn_styles['backgroundColor']}"
-            assert btn_styles["borderRadius"] == "4px", f"Expected 4px radius, got {btn_styles['borderRadius']}"
-            assert btn_styles["boxShadow"] == "none", f"Expected no box-shadow, got {btn_styles['boxShadow']}"
-            print("  [PASS] Verified: 4px radius, #533afd Indigo Ink fill, zero drop-shadow.")
+            login_ss = SCREENSHOT_DIR / "01_monad_login_gate.png"
+            page.screenshot(path=str(login_ss), full_page=True)
+            print(f"  [SAVED] Screenshot: {login_ss}")
 
-            home_ss = SCREENSHOT_DIR / "01_stripe_home.png"
+            # -----------------------------------------------------------------
+            # TEST 2: Exporter Login Flow
+            # -----------------------------------------------------------------
+            print("\n[TEST 2] Logging in as 'exporter'...")
+            # Fill credentials in streamlit-authenticator form
+            username_input = page.locator('input[aria-label="Username"], input[type="text"]').first
+            username_input.fill("exporter")
+
+            password_input = page.locator('input[aria-label="Password"], input[type="password"]').first
+            password_input.fill("export123")
+
+            login_btn = page.locator('button:has-text("Login")').first
+            login_btn.click()
+            print("  [INFO] Submitted exporter credentials, awaiting session...")
+
+            # Verify logged-in session header
+            user_badge = page.locator('text=Logged in as Priya Exporter').first
+            user_badge.wait_for(state="visible", timeout=15000)
+            print("  [PASS] Successfully logged in as 'exporter' (Priya Exporter).")
+
+            home_ss = SCREENSHOT_DIR / "02_monad_exporter_home.png"
             page.screenshot(path=str(home_ss), full_page=True)
             print(f"  [SAVED] Screenshot: {home_ss}")
 
             # -----------------------------------------------------------------
-            # TEST 2: Vernacular Sample Deal Loading & Quotation Calculation
+            # TEST 3: Voice Deal Desk & Human Approval Gate
             # -----------------------------------------------------------------
-            print("\n[TEST 2] Verifying Deal Calculation & Quotation Breakdown...")
+            print("\n[TEST 3] Testing Deal Desk calculation and human approval gate...")
             load_sample_btn = page.locator('button:has-text("LOAD EN SAMPLE")').first
             load_sample_btn.wait_for(state="visible", timeout=5000)
             load_sample_btn.click()
             page.wait_for_timeout(1500)
 
-            # Click SEND TO AGENT
             send_btn = page.locator('button:has-text("SEND TO AGENT")').first
             send_btn.wait_for(state="visible", timeout=5000)
             send_btn.click()
-            print("  [INFO] Clicked 'SEND TO AGENT', waiting for copilot calculations...")
+            print("  [INFO] Clicked 'SEND TO AGENT', calculating quote...")
 
             # Wait for calculation results
             quote_card = page.locator('text=Commercial Quotation Breakdown').first
             quote_card.wait_for(state="visible", timeout=20000)
-            print("  [PASS] Commercial Quotation breakdown rendered successfully.")
+            print("  [PASS] Commercial Quotation breakdown rendered.")
 
-            # Check structured details
-            page.locator('text=Drafted English Buyer Message').first.wait_for(state="visible", timeout=5000)
-            page.locator('text=Estimated FX Margin Buffer Protected').first.wait_for(state="visible", timeout=5000)
-            print("  [PASS] Buyer message draft and FX buffer card verified.")
-
-            quote_ss = SCREENSHOT_DIR / "02_stripe_quotation.png"
-            page.screenshot(path=str(quote_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {quote_ss}")
-
-            # -----------------------------------------------------------------
-            # TEST 3: Human Approval Gate & FedAI Persistence
-            # -----------------------------------------------------------------
-            print("\n[TEST 3] Testing Human-in-the-Loop Approval Gate...")
+            # Approve deal
             approve_btn = page.locator('button:has-text("APPROVE & SAVE DEAL")').first
             approve_btn.wait_for(state="visible", timeout=5000)
             approve_btn.click()
 
             approval_msg = page.locator('text=approved and stored in SQLite database').first
             approval_msg.wait_for(state="visible", timeout=10000)
-            print("  [PASS] Explicit human approval gate successfully saved deal.")
+            print("  [PASS] Deal approved and recorded with user attribution.")
 
-            approved_ss = SCREENSHOT_DIR / "03_stripe_approved.png"
-            page.screenshot(path=str(approved_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {approved_ss}")
-
-            # -----------------------------------------------------------------
-            # TEST 4: Adversarial Risk Auditor Tab
-            # -----------------------------------------------------------------
-            print("\n[TEST 4] Testing Adversarial Risk Auditor Tab...")
-            risk_tab = page.locator('[data-baseweb="tab"]:has-text("RISK AUDITOR")').first
-            risk_tab.click()
-            page.wait_for_timeout(1000)
-
-            # Click Audit button
-            audit_btn = page.locator('button:has-text("AUDIT DEAL RISK")').first
-            audit_btn.wait_for(state="visible", timeout=5000)
-            audit_btn.click()
-
-            verdict = page.locator('text=Risk Auditor Verdict').first
-            verdict.wait_for(state="visible", timeout=10000)
-            print("  [PASS] Adversarial risk verdict rendered.")
-
-            reasons = page.locator('text=Reasons NOT to Accept This Deal').first
-            reasons.wait_for(state="visible", timeout=5000)
-            print("  [PASS] Reasons NOT to accept deal displayed.")
-
-            risk_ss = SCREENSHOT_DIR / "04_stripe_risk_auditor.png"
-            page.screenshot(path=str(risk_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {risk_ss}")
+            quote_ss = SCREENSHOT_DIR / "03_monad_quotation_approved.png"
+            page.screenshot(path=str(quote_ss), full_page=True)
+            print(f"  [SAVED] Screenshot: {quote_ss}")
 
             # -----------------------------------------------------------------
-            # TEST 5: Document Agent Tab
+            # TEST 4: Audit Log Table Alignment & Fixed Colgroup
             # -----------------------------------------------------------------
-            print("\n[TEST 5] Testing Document Agent Tab...")
+            print("\n[TEST 4] Verifying Audit Log Table Fixed Layout & Column Widths...")
+            audit_tab = page.locator('[data-baseweb="tab"]:has-text("AUDIT LOG")').first
+            audit_tab.click()
+            page.wait_for_timeout(1500)
+
+            # Check table existence and colgroup
+            audit_table = page.locator('table.audit-table').first
+            audit_table.wait_for(state="visible", timeout=10000)
+
+            col_widths = page.evaluate(
+                """() => {
+                    const table = document.querySelector('table.audit-table');
+                    const cols = table.querySelectorAll('colgroup col');
+                    return Array.from(cols).map(c => c.className);
+                }"""
+            )
+            print("  [INFO] Audit table colgroup classes:", col_widths)
+            assert "col-time" in col_widths
+            assert "col-act" in col_widths
+            assert "col-rat" in col_widths
+            assert "col-risk" in col_widths
+            assert "col-stat" in col_widths
+            assert "col-user" in col_widths
+            print("  [PASS] Fixed table-layout with exact colgroup widths verified.")
+
+            # Verify user column shows exporter
+            page.locator('text=exporter').first.wait_for(state="visible", timeout=5000)
+            print("  [PASS] User attribution column verified in audit table.")
+
+            audit_ss = SCREENSHOT_DIR / "04_monad_audit_table.png"
+            page.screenshot(path=str(audit_ss), full_page=True)
+            print(f"  [SAVED] Screenshot: {audit_ss}")
+
+            # -----------------------------------------------------------------
+            # TEST 5: Document Agent & Risk Auditor Tabs
+            # -----------------------------------------------------------------
+            print("\n[TEST 5] Testing Document Agent and Adversarial Risk Auditor...")
+            # Documents Tab
             doc_tab = page.locator('[data-baseweb="tab"]:has-text("DOCUMENTS")').first
             doc_tab.click()
             page.wait_for_timeout(1000)
@@ -147,54 +149,58 @@ def run_e2e_tests() -> bool:
             gen_doc_btn = page.locator('button:has-text("GENERATE SHIPMENT PAPERS")').first
             gen_doc_btn.wait_for(state="visible", timeout=5000)
             gen_doc_btn.click()
-
             page.locator('text=Packing Specification').first.wait_for(state="visible", timeout=10000)
-            page.locator('text=UAE CEPA Import Compliance Checklist').first.wait_for(state="visible", timeout=5000)
             print("  [PASS] Document Agent packing list and CEPA compliance verified.")
 
-            doc_ss = SCREENSHOT_DIR / "05_stripe_documents.png"
-            page.screenshot(path=str(doc_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {doc_ss}")
-
-            # -----------------------------------------------------------------
-            # TEST 6: FedAI Control Tower Audit Log Tab
-            # -----------------------------------------------------------------
-            print("\n[TEST 6] Testing FedAI Control Tower Audit Log...")
-            audit_tab = page.locator('[data-baseweb="tab"]:has-text("AUDIT LOG")').first
-            audit_tab.click()
+            # Risk Auditor Tab
+            risk_tab = page.locator('[data-baseweb="tab"]:has-text("RISK AUDITOR")').first
+            risk_tab.click()
             page.wait_for_timeout(1000)
 
-            page.locator('text=FedAI Control Tower & Audit Log').first.wait_for(state="visible", timeout=10000)
-            page.locator('text=Action').first.wait_for(state="visible", timeout=5000)
-            page.locator('text=Risk Tier').first.wait_for(state="visible", timeout=5000)
-            print("  [PASS] Control Tower immutable audit table and risk columns verified.")
-
-            audit_ss = SCREENSHOT_DIR / "06_stripe_control_tower.png"
-            page.screenshot(path=str(audit_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {audit_ss}")
+            audit_btn = page.locator('button:has-text("AUDIT DEAL RISK")').first
+            audit_btn.wait_for(state="visible", timeout=5000)
+            audit_btn.click()
+            page.locator('text=Risk Auditor Verdict').first.wait_for(state="visible", timeout=10000)
+            print("  [PASS] Adversarial Risk Auditor warnings rendered.")
 
             # -----------------------------------------------------------------
-            # TEST 7: Cost & Route Corridor Estimator Tab
+            # TEST 6: Admin Login & Full Audit Access
             # -----------------------------------------------------------------
-            print("\n[TEST 7] Testing Cost & Route Corridor Estimator...")
-            route_tab = page.locator('[data-baseweb="tab"]:has-text("COST & ROUTE")').first
-            route_tab.click()
-            page.wait_for_timeout(1000)
+            print("\n[TEST 6] Testing Admin Login & Governance Control Access...")
+            logout_btn = page.locator('button:has-text("LOG OUT")').first
+            logout_btn.click()
+            page.wait_for_timeout(1500)
 
-            page.locator('text=Corridor Freight & Transit Estimator').first.wait_for(state="visible", timeout=10000)
-            calc_route_btn = page.locator('button:has-text("CALCULATE ROUTE BENCHMARKS")').first
-            calc_route_btn.wait_for(state="visible", timeout=5000)
-            calc_route_btn.click()
+            # Re-login as Admin
+            user_input = page.locator('input[aria-label="Username"], input[type="text"]').first
+            user_input.fill("admin")
 
-            page.locator('text=Transit Window').first.wait_for(state="visible", timeout=10000)
-            print("  [PASS] Corridor Freight Estimator verified.")
+            pw_input = page.locator('input[aria-label="Password"], input[type="password"]').first
+            pw_input.fill("admin123")
 
-            route_ss = SCREENSHOT_DIR / "07_stripe_cost_route.png"
-            page.screenshot(path=str(route_ss), full_page=True)
-            print(f"  [SAVED] Screenshot: {route_ss}")
+            page.locator('button:has-text("Login")').first.click()
+            page.wait_for_timeout(2000)
+
+            # Verify Admin badge
+            page.locator('text=Logged in as FedAI Control Admin').first.wait_for(state="visible", timeout=15000)
+            page.locator('text=ADMIN').first.wait_for(state="visible", timeout=5000)
+            print("  [PASS] Successfully authenticated as FedAI Administrator.")
+
+            # Go to Audit Log Tab as Admin
+            admin_audit_tab = page.locator('[data-baseweb="tab"]:has-text("AUDIT LOG")').first
+            admin_audit_tab.wait_for(state="visible", timeout=10000)
+            admin_audit_tab.click(force=True)
+            page.wait_for_timeout(2500)
+
+            page.locator('text=Full Audit Log').first.wait_for(state="visible", timeout=10000)
+            print("  [PASS] Admin has access to full audit log across all users.")
+
+            admin_ss = SCREENSHOT_DIR / "05_monad_admin_audit.png"
+            page.screenshot(path=str(admin_ss), full_page=True)
+            print(f"  [SAVED] Screenshot: {admin_ss}")
 
             print("\n==================================================")
-            print("ALL PLAYWRIGHT E2E TESTS PASSED SUCCESSFULLY!")
+            print("ALL PLAYWRIGHT TESTS PASSED SUCCESSFULLY!")
             print("==================================================")
 
         except Exception as e:

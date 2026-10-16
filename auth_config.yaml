@@ -1,0 +1,22 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@exportpilot.trade
+      name: FedAI Control Admin
+      password: $2b$12$/8JkBiteUmi2AaFXr9/X8Oos8K16ZRYZVowEsxNA7mat2ziC.hkgq
+      roles:
+        - admin
+    exporter:
+      email: priya@exportpilot.trade
+      name: Priya Exporter
+      password: $2b$12$zTppiqRYE9LaqMsgjY5DM.TdU5vBvSb07OPZ0GawWndoNnMZGQhGa
+      roles:
+        - exporter
+cookie:
+  expiry_days: 1.0
+  key: exportpilot_jwt_signature_secret_key_2026
+  name: exportpilot_cookie
+pre-authorized:
+  emails:
+    - admin@exportpilot.trade
+    - priya@exportpilot.trade

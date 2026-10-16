@@ -1,23 +1,28 @@
 """ExportPilot — India-UAE Trade Copilot.
 
 Monad Editorial Design System on warm parchment (#f6f3f1) with faster-whisper
-local speech processing (Tamil, Hindi, English), FedAI Control Tower governance,
-adversarial Risk Auditor, Export Document Agent, and Freight Route Estimator.
+local speech processing, FedAI Control Tower governance, adversarial Risk Auditor,
+Export Document Agent, Corridor Freight Estimator, and role-based authentication.
 """
 
 from __future__ import annotations
 
 import hashlib
+import html
 import io
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
+import yaml
 from dotenv import load_dotenv
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
 
 from agent.graph import run_trade_copilot
 from agent.tools import (
@@ -31,6 +36,7 @@ from agent.tools import (
     get_fx,
     get_trade_news,
     save_deal,
+    update_audit_log_status,
 )
 from agent.voice import (
     SAMPLE_VERNACULAR_QUERIES,
@@ -50,6 +56,113 @@ st.set_page_config(
 
 # Apply Monad Editorial Stylesheet
 load_monad_styles()
+
+# -----------------------------------------------------------------------------
+# 1. SECURITY & AUTHENTICATION (streamlit-authenticator)
+# -----------------------------------------------------------------------------
+AUTH_CONFIG_PATH = Path("auth_config.yaml")
+
+# Load or initialize auth configuration
+if AUTH_CONFIG_PATH.exists():
+    with open(AUTH_CONFIG_PATH, "r", encoding="utf-8") as f:
+        auth_config = yaml.load(f, Loader=SafeLoader)
+else:
+    auth_config = {
+        "credentials": {
+            "usernames": {
+                "admin": {
+                    "email": "admin@exportpilot.trade",
+                    "name": "FedAI Control Admin",
+                    "password": "$2b$12$/8JkBiteUmi2AaFXr9/X8Oos8K16ZRYZVowEsxNA7mat2ziC.hkgq",
+                    "roles": ["admin"],
+                },
+                "exporter": {
+                    "email": "priya@exportpilot.trade",
+                    "name": "Priya Exporter",
+                    "password": "$2b$12$zTppiqRYE9LaqMsgjY5DM.TdU5vBvSb07OPZ0GawWndoNnMZGQhGa",
+                    "roles": ["exporter"],
+                },
+            }
+        },
+        "cookie": {
+            "expiry_days": 1.0,
+            "key": "exportpilot_jwt_signature_secret_key_2026",
+            "name": "exportpilot_cookie",
+        },
+    }
+
+authenticator = stauth.Authenticate(
+    auth_config["credentials"],
+    auth_config["cookie"]["name"],
+    auth_config["cookie"]["key"],
+    auth_config["cookie"]["expiry_days"],
+)
+
+# -----------------------------------------------------------------------------
+# 2. INACTIVITY SESSION TIMEOUT (30 MINUTES)
+# -----------------------------------------------------------------------------
+SESSION_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+current_time = time.time()
+if "last_activity_timestamp" in st.session_state:
+    if current_time - st.session_state["last_activity_timestamp"] > SESSION_TIMEOUT_SECONDS:
+        st.session_state.clear()
+        st.warning("⚠️ Session expired after 30 minutes of inactivity. Please log in again.")
+        st.stop()
+st.session_state["last_activity_timestamp"] = current_time
+
+# Render Login Dialog
+authenticator.login()
+
+# Gate application strictly behind authentication
+auth_status = st.session_state.get("authentication_status")
+
+if auth_status is False:
+    st.error("❌ Username or password is incorrect. Please try again.")
+    st.markdown(
+        """
+        <div class="monad-card" style="max-width: 500px; margin: 2rem auto; padding: 24px;">
+            <div class="serif-card-title" style="font-size: 20px;">Demo Credentials</div>
+            <p style="font-size: 13px; color: #797776; margin-bottom: 8px;">Use the following pre-configured accounts:</p>
+            <div style="font-size: 13px; color: #242424; line-height: 1.8;">
+                <strong>Admin Role:</strong> <code>admin</code> / <code>admin123</code><br>
+                <strong>Exporter Role:</strong> <code>exporter</code> / <code>export123</code>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+elif auth_status is None:
+    st.markdown(
+        """
+        <div class="monad-card" style="max-width: 540px; margin: 3rem auto; padding: 32px; text-align: center;">
+            <div class="serif-hero" style="font-size: 38px; margin-bottom: 8px;">ExportPilot</div>
+            <div style="font-size: 14px; color: #797776; margin-bottom: 24px;">
+                India–UAE Trade Copilot · FedAI Governance Gateway
+            </div>
+            <div style="background-color: #faf8f5; border: 1px solid #e5e1db; border-radius: 20px; padding: 18px; text-align: left; font-size: 13px;">
+                <div style="font-weight: 600; margin-bottom: 6px; color: #242424;">Demo Credentials:</div>
+                <div style="color: #4e4d4d; line-height: 1.8;">
+                    • <strong>Exporter Role:</strong> <code>exporter</code> / <code>export123</code><br>
+                    • <strong>Admin Role:</strong> <code>admin</code> / <code>admin123</code>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+# Retrieve Authenticated User Details
+current_user = st.session_state.get("username", "exporter")
+user_full_name = st.session_state.get("name", "Priya Exporter")
+user_roles = st.session_state.get("roles", ["exporter"])
+is_admin = "admin" in user_roles
+
+# Security: File Upload Thresholds
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_AUDIO_EXTS = {"wav", "mp3", "m4a", "ogg", "opus", "webm"}
+ALLOWED_DOC_EXTS = {"pdf", "png", "jpg", "jpeg"}
 
 
 @st.cache_data(ttl=600)
@@ -83,35 +196,42 @@ def init_session_state() -> None:
 init_session_state()
 
 # -----------------------------------------------------------------------------
-# 1. TOP ANNOUNCEMENT BAR
+# 3. TOP ANNOUNCEMENT & SESSION BAR
 # -----------------------------------------------------------------------------
+role_badge_class = "role-tag-admin" if is_admin else "role-tag-exporter"
+role_label = "ADMIN" if is_admin else "EXPORTER"
+
 st.markdown(
-    """
+    f"""
     <div class="announcement-bar">
         <span>ExportPilot · Trade Copilot</span>
-        <span>Built for Dubai Create AI Agents Championship</span>
+        <span>
+            Logged in as <strong>{html.escape(user_full_name)}</strong> (@{html.escape(current_user)})
+            <span class="{role_badge_class}" style="margin-left: 8px;">{role_label}</span>
+        </span>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# -----------------------------------------------------------------------------
-# 2. HERO SECTION (SERIF 64PX, MONO SUBTITLE, BLURRED GRADIENT WASH)
-# -----------------------------------------------------------------------------
-st.markdown(
-    """
-    <div class="hero-wrapper">
-        <div class="hero-wash"></div>
-        <div class="hero-content">
+# Top Bar Header with Logout in right column
+col_head1, col_head2 = st.columns([4, 1])
+with col_head1:
+    st.markdown(
+        """
+        <div class="hero-wrapper" style="padding-top: 1rem; margin-bottom: 1.5rem;">
             <div class="serif-hero">Export smarter.<br>Speak in your language.</div>
             <div class="hero-subtitle">
                 India–UAE export trade deals quoted in seconds. Speak in Tamil, Hindi, or English — automated CEPA tariff intelligence, live INR/AED hedging, and FedAI Control Tower governance.
             </div>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
+with col_head2:
+    st.markdown("<div style='text-align: right; margin-top: 1.5rem;'>", unsafe_allow_html=True)
+    authenticator.logout("LOG OUT ⎋", "main")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # Market Ticker Bar (Parchment Card)
 live_fx = cached_fx("INR", "AED")
@@ -153,7 +273,7 @@ with col_tick3:
     )
 
 # -----------------------------------------------------------------------------
-# 3. TABS STYLED AS PILLS
+# 4. TABS NAVIGATION
 # -----------------------------------------------------------------------------
 tab_voice, tab_docs, tab_risk, tab_tower, tab_route = st.tabs([
     "VOICE ASSISTANT",
@@ -164,7 +284,7 @@ tab_voice, tab_docs, tab_risk, tab_tower, tab_route = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: VOICE ASSISTANT (TASK 1: REBUILT VOICE PIPELINE)
+# TAB 1: VOICE ASSISTANT (BUG FIX: DEFAULT TO ENGLISH, NO DUPLICATE LOGS)
 # =============================================================================
 with tab_voice:
     st.markdown(
@@ -172,7 +292,7 @@ with tab_voice:
         <div class="monad-card">
             <div class="serif-card-title">Multilingual Voice Deal Desk</div>
             <p style="color: #797776; font-size: 14px; margin-bottom: 1.5rem;">
-                Record speech or upload audio in Tamil, Hindi, or English. Local faster-whisper converts speech to text, detects the language, and translates to international trade English.
+                Record speech or upload audio in English, Hindi, or Tamil. Local faster-whisper converts speech to text, detects the language, and translates to international trade English.
             </p>
         </div>
         """,
@@ -186,10 +306,12 @@ with tab_voice:
 
         c_opt1, c_opt2 = st.columns(2)
         with c_opt1:
+            # BUG FIX: Default language to English to prevent "NN" auto-detect failures
             lang_selector = st.selectbox(
                 "Language Selector",
-                ["Auto-detect", "English", "Hindi", "Tamil"],
-                help="Select native language or allow auto-detection.",
+                ["English", "Hindi", "Tamil", "Auto-detect"],
+                index=0,
+                help="Defaulted to English. Select native Hindi or Tamil for vernacular transcription.",
             )
         with c_opt2:
             model_selector = st.selectbox(
@@ -213,21 +335,31 @@ with tab_voice:
             try:
                 mic_file = st.audio_input("Record Voice Deal Note")
                 if mic_file is not None:
-                    audio_bytes = mic_file.read()
-                    format_hint = "webm"
+                    raw_mic = mic_file.read()
+                    if len(raw_mic) > MAX_FILE_SIZE_BYTES:
+                        st.error("⚠️ Recorded audio exceeds the 10 MB limit.")
+                    else:
+                        audio_bytes = raw_mic
+                        format_hint = "webm"
             except Exception as e:
-                st.error(f"Microphone access error: {e}. Please ensure browser mic permission is allowed.")
+                st.error(f"Microphone access notice: {e}. Please ensure browser mic permission is allowed.")
         else:
             up_file = st.file_uploader(
-                "Upload voice note",
+                "Upload voice note (Max 10 MB)",
                 type=["wav", "mp3", "m4a", "ogg", "opus", "webm"],
-                help="Supports all major audio formats.",
+                help="Supports all major audio formats up to 10 MB.",
             )
             if up_file is not None:
-                audio_bytes = up_file.read()
-                format_hint = up_file.name.split(".")[-1]
+                ext = up_file.name.split(".")[-1].lower()
+                if ext not in ALLOWED_AUDIO_EXTS:
+                    st.error(f"⚠️ Unsupported audio format: .{ext}. Allowed: {', '.join(ALLOWED_AUDIO_EXTS)}")
+                elif up_file.size > MAX_FILE_SIZE_BYTES:
+                    st.error(f"⚠️ File size ({up_file.size / 1024 / 1024:.1f} MB) exceeds maximum allowed 10 MB limit.")
+                else:
+                    audio_bytes = up_file.read()
+                    format_hint = ext
 
-        # Automatic Audio Processing upon New Recording/Upload
+        # Automatic Audio Processing guarded against duplicate execution
         if audio_bytes is not None:
             a_hash = hashlib.md5(audio_bytes).hexdigest()
             if st.session_state.last_processed_audio_hash != a_hash:
@@ -249,6 +381,7 @@ with tab_voice:
                             reason=f"Transcribed {res.get('duration_sec')}s audio in [{res.get('language_name')}] via faster-whisper {model_selector}",
                             risk_level="Low",
                             status="Transcribed",
+                            user=current_user,
                         )
                         st.rerun()
                     else:
@@ -263,7 +396,7 @@ with tab_voice:
             st.markdown(
                 f"""
                 <div style="margin-bottom: 12px;">
-                    <span class="pill-badge pill-low">Detected: {vm.get('language_name')} ({vm.get('language')})</span>
+                    <span class="pill-badge pill-low">Detected: {html.escape(str(vm.get('language_name')))} ({html.escape(str(vm.get('language')))})</span>
                     <span class="pill-badge" style="margin-left: 6px;">Duration: {vm.get('duration_sec')}s</span>
                     <span class="pill-badge" style="margin-left: 6px;">Size: {vm.get('byte_size'):,} Bytes</span>
                 </div>
@@ -290,16 +423,18 @@ with tab_voice:
         col_act1, col_act2 = st.columns([1.5, 1])
         with col_act1:
             if st.button("SEND TO AGENT ▸", type="primary", use_container_width=True):
-                if st.session_state.deal_query_input.strip():
+                clean_query = st.session_state.deal_query_input.strip()
+                if clean_query:
                     with st.spinner("ExportPilot Agent: Calculating FX, verifying CEPA protocols, and drafting quote..."):
-                        deal_result = run_trade_copilot(st.session_state.deal_query_input)
+                        deal_result = run_trade_copilot(clean_query)
                         st.session_state.current_deal = deal_result
                         st.session_state.approval_message = None
                         audit_log_event(
                             action="Deal Quotation Drafted",
-                            reason=f"Calculated quote for query: {st.session_state.deal_query_input[:60]}...",
+                            reason=f"Calculated quote for query: {clean_query[:60]}...",
                             risk_level="Medium",
                             status="Pending Human Approval",
+                            user=current_user,
                         )
                         st.rerun()
                 else:
@@ -354,9 +489,9 @@ with tab_voice:
             <div class="monad-card" style="padding: 30px; margin-top: 1.5rem;">
                 <div class="serif-card-title" style="font-size: 20px;">Destination: UAE Buyer Norms</div>
                 <div style="font-size: 13px; color: #4e4d4d; line-height: 1.6; margin-top: 10px;">
-                    <strong>Working Week:</strong> {uae_norms['working_week']}<br>
-                    <strong>Payment Norms:</strong> {uae_norms['payment_terms']}<br>
-                    <strong>Port Protocols:</strong> {uae_norms['negotiation_notes']}
+                    <strong>Working Week:</strong> {html.escape(uae_norms['working_week'])}<br>
+                    <strong>Payment Norms:</strong> {html.escape(uae_norms['payment_terms'])}<br>
+                    <strong>Port Protocols:</strong> {html.escape(uae_norms['negotiation_notes'])}
                 </div>
             </div>
             """,
@@ -382,8 +517,8 @@ with tab_voice:
                 f"""
                 <div class="monad-card">
                     <div class="serif-card-title">Commercial Quotation Breakdown</div>
-                    <table style="margin-top: 1rem;">
-                        <tr><td>Item Description</td><td style="text-align: right; font-weight: 500;">{q_data.get('item')}</td></tr>
+                    <table style="margin-top: 1rem; width: 100%;">
+                        <tr><td>Item Description</td><td style="text-align: right; font-weight: 500;">{html.escape(str(q_data.get('item')))}</td></tr>
                         <tr><td>Quantity</td><td style="text-align: right; font-weight: 500;">{q_data.get('quantity', 0):,.0f} Units</td></tr>
                         <tr><td>Unit Price (INR)</td><td style="text-align: right; font-weight: 500;">₹{q_data.get('unit_price_inr', 0):,.2f}</td></tr>
                         <tr><td>Total FOB Value (INR)</td><td style="text-align: right; font-weight: 500;">₹{q_data.get('total_inr', 0):,.2f}</td></tr>
@@ -402,7 +537,7 @@ with tab_voice:
                 unsafe_allow_html=True,
             )
 
-            # Highlight Card (Periwinkle Mist #cfdaf5)
+            # Highlight Card (Estimated FX Margin Buffer Protected)
             est_buffer = q_data.get("estimated_fx_buffer", 0.0)
             st.markdown(
                 f"""
@@ -410,7 +545,7 @@ with tab_voice:
                     <div style="font-size: 11px; text-transform: uppercase; color: #2b59d1; font-weight: 500; letter-spacing: 0.05em;">Estimated FX Margin Buffer Protected</div>
                     <div style="font-size: 26px; font-weight: 500; color: #242424; margin-top: 4px;">AED {est_buffer:,.2f}</div>
                     <div style="font-size: 12px; color: #4e4d4d; margin-top: 6px;">
-                        Formula: <code>{q_data.get('buffer_formula')}</code>
+                        Formula: <code>{html.escape(str(q_data.get('buffer_formula', '')))}</code>
                     </div>
                 </div>
                 """,
@@ -458,17 +593,18 @@ with tab_voice:
                         risk_level="Low",
                         status="Human Approved",
                         deal_id=new_id,
+                        user=current_user,
                     )
                     st.success(f"Deal #{new_id} approved and stored in SQLite database!")
             with col_b2:
                 if st.button("DISCARD DRAFT", use_container_width=True):
                     st.session_state.current_deal = None
-                    audit_log_event("Deal Discarded", "User discarded quotation draft", "Low", "Discarded")
+                    audit_log_event("Deal Discarded", "User discarded quotation draft", "Low", "Discarded", user=current_user)
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
 # =============================================================================
-# TAB 2: DOCUMENTS (EXPORT PACKING LIST & CEPA CHECKLIST)
+# TAB 2: DOCUMENTS (EXPORT PACKING LIST & CEPA CHECKLIST, 10MB LIMIT)
 # =============================================================================
 with tab_docs:
     st.markdown(
@@ -490,8 +626,27 @@ with tab_docs:
         doc_qty = st.number_input("Consignment Quantity (Units / Pieces)", min_value=1.0, value=500.0, step=50.0)
         doc_price = st.number_input("Unit Price in INR", min_value=1.0, value=350.0, step=10.0)
 
+        # Optional Invoice Document Upload (10 MB Limit, PDF/Images)
+        doc_upload = st.file_uploader(
+            "Upload Existing Proforma Invoice (Optional, Max 10 MB)",
+            type=["pdf", "png", "jpg", "jpeg"],
+        )
+        if doc_upload is not None:
+            if doc_upload.size > MAX_FILE_SIZE_BYTES:
+                st.error("⚠️ Document exceeds the maximum 10 MB limit.")
+            else:
+                st.success(f"Attached invoice document: {doc_upload.name} ({doc_upload.size / 1024:.1f} KB)")
+
         if st.button("GENERATE SHIPMENT PAPERS ▸", type="primary", use_container_width=True):
-            st.session_state["doc_output"] = generate_packing_list_and_compliance(doc_item, doc_qty, doc_price)
+            clean_item = html.escape(doc_item.strip())
+            st.session_state["doc_output"] = generate_packing_list_and_compliance(clean_item, doc_qty, doc_price)
+            audit_log_event(
+                action="Document Generation",
+                reason=f"Generated export packing list and CEPA checklist for {clean_item}",
+                risk_level="Low",
+                status="Generated",
+                user=current_user,
+            )
 
     with doc_c2:
         if "doc_output" in st.session_state:
@@ -502,13 +657,13 @@ with tab_docs:
                 f"""
                 <div class="monad-card" style="padding: 30px;">
                     <div class="serif-card-title" style="font-size: 20px;">Packing Specification</div>
-                    <table style="margin-top: 12px;">
-                        <tr><td>Item</td><td>{pkl['item']} (HS Code: <code>{pkl['hs_code']}</code>)</td></tr>
-                        <tr><td>Packages</td><td>{pkl['total_packages']}</td></tr>
-                        <tr><td>Packaging Type</td><td>{pkl['package_type']}</td></tr>
-                        <tr><td>Weight</td><td>Net: {pkl['net_weight']} | Gross: {pkl['gross_weight']}</td></tr>
-                        <tr><td>Carton Dimensions</td><td>{pkl['dimensions']}</td></tr>
-                        <tr><td>Shipping Marks</td><td><code>{pkl['marks_and_numbers']}</code></td></tr>
+                    <table style="margin-top: 12px; width: 100%;">
+                        <tr><td>Item</td><td>{html.escape(str(pkl['item']))} (HS Code: <code>{html.escape(str(pkl['hs_code']))}</code>)</td></tr>
+                        <tr><td>Packages</td><td>{html.escape(str(pkl['total_packages']))}</td></tr>
+                        <tr><td>Packaging Type</td><td>{html.escape(str(pkl['package_type']))}</td></tr>
+                        <tr><td>Weight</td><td>Net: {html.escape(str(pkl['net_weight']))} | Gross: {html.escape(str(pkl['gross_weight']))}</td></tr>
+                        <tr><td>Carton Dimensions</td><td>{html.escape(str(pkl['dimensions']))}</td></tr>
+                        <tr><td>Shipping Marks</td><td><code>{html.escape(str(pkl['marks_and_numbers']))}</code></td></tr>
                     </table>
                 </div>
                 """,
@@ -557,7 +712,16 @@ with tab_risk:
                 deal_terms_input = "The buyer pays 50% advance via Letter of Credit and has ordered 3 times before."
 
         if st.button("AUDIT DEAL RISK ▸", type="primary", use_container_width=True):
-            st.session_state["auditor_verdict"] = audit_risk_assessment(deal_terms_input)
+            clean_terms = html.escape(deal_terms_input.strip())
+            st.session_state["auditor_verdict"] = audit_risk_assessment(clean_terms)
+            v = st.session_state["auditor_verdict"]
+            audit_log_event(
+                action="Deal Risk Audited",
+                reason=f"Risk assessment returned tier: {v['risk_level']}",
+                risk_level=v["risk_level"],
+                status="Audited",
+                user=current_user,
+            )
 
     with r_col2:
         if "auditor_verdict" in st.session_state:
@@ -573,12 +737,12 @@ with tab_risk:
                         <span class="pill-badge {pill_class}">Risk: {lvl.upper()}</span>
                     </div>
                     <div style="font-size: 18px; color: {'#991b1b' if lvl=='High' else '#1b633e'}; margin-top: 10px; font-weight: 500;">
-                        {v['recommendation']}
+                        {html.escape(v['recommendation'])}
                     </div>
                     <div style="margin-top: 1.5rem;">
                         <div style="font-size: 13px; text-transform: uppercase; color: #797776; margin-bottom: 8px;">Reasons NOT to Accept This Deal:</div>
                         <ul style="font-size: 14px; color: #242424; line-height: 1.6; padding-left: 1.2rem;">
-                            {''.join(f'<li>{r}</li>' for r in v['reasons'])}
+                            {''.join(f'<li>{html.escape(r)}</li>' for r in v['reasons'])}
                         </ul>
                     </div>
                 </div>
@@ -589,7 +753,7 @@ with tab_risk:
             st.info("Click 'Audit Deal Risk' to view the adversarial analysis.")
 
 # =============================================================================
-# TAB 4: AUDIT LOG (FedAI CONTROL TOWER)
+# TAB 4: AUDIT LOG (FedAI CONTROL TOWER — FIXED COLGROUP ALIGNMENT + RBAC)
 # =============================================================================
 with tab_tower:
     st.markdown(
@@ -597,51 +761,116 @@ with tab_tower:
         <div class="monad-card">
             <div class="serif-card-title">FedAI Control Tower & Audit Log</div>
             <p style="color: #797776; font-size: 14px;">
-                UAE Federal AI Governance Layer. Every agent decision, rationale, and risk tier is logged immutably. High-risk decisions require explicit human authorization before execution.
+                UAE Federal AI Governance Layer. Every agent decision, rationale, risk tier, and user is logged immutably.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    logs = get_audit_logs(limit=50)
-    if logs:
-        # Display as custom Monad table
+    # Role-Based Log Retrieval: Exporters see only their own logs; Admins see full log
+    filter_user = None if is_admin else current_user
+
+    if is_admin:
+        admin_c1, admin_c2 = st.columns([2, 1])
+        with admin_c1:
+            st.markdown(
+                f"<div style='font-size: 13px; color: #797776;'>Showing <strong>Full Audit Log</strong> (Administrator Access).</div>",
+                unsafe_allow_html=True,
+            )
+        with admin_c2:
+            view_filter = st.selectbox("Filter by User:", ["All Users", "admin", "exporter"])
+            if view_filter != "All Users":
+                filter_user = view_filter
+    else:
         st.markdown(
-            """
-            <table>
-                <thead>
-                    <tr>
-                        <th>Timestamp (UTC)</th>
-                        <th>Action</th>
-                        <th>Governance Rationale</th>
-                        <th>Risk Tier</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """,
+            f"<div style='font-size: 13px; color: #797776; margin-bottom: 12px;'>Showing audit logs for <strong>@{html.escape(current_user)}</strong>.</div>",
             unsafe_allow_html=True,
         )
 
-        for log_entry in logs:
-            r_lvl = log_entry.get("risk_level", "Low")
+    logs = get_audit_logs(limit=50, user=filter_user)
+
+    if logs:
+        # Build ONE unified HTML table with table-layout: fixed and <colgroup>
+        table_html = [
+            '<div class="audit-table-wrapper">',
+            '<table class="audit-table">',
+            '  <colgroup>',
+            '    <col class="col-time">',  # 15%
+            '    <col class="col-act">',   # 18%
+            '    <col class="col-rat">',   # 37%
+            '    <col class="col-risk">',  # 10%
+            '    <col class="col-stat">',  # 12%
+            '    <col class="col-user">',  # 8%
+            '  </colgroup>',
+            '  <thead>',
+            '    <tr>',
+            '      <th>Timestamp (UTC)</th>',
+            '      <th>Action</th>',
+            '      <th>Governance Rationale</th>',
+            '      <th>Risk Tier</th>',
+            '      <th>Status</th>',
+            '      <th>User</th>',
+            '    </tr>',
+            '  </thead>',
+            '  <tbody>',
+        ]
+
+        for entry in logs:
+            r_lvl = entry.get("risk_level", "Low")
             pill_c = "pill-high" if r_lvl == "High" else ("pill-med" if r_lvl == "Medium" else "pill-low")
-            st.markdown(
-                f"""
+            t_str = html.escape(str(entry.get("timestamp", ""))[:19].replace("T", " "))
+            act_str = html.escape(str(entry.get("action", "")))
+            rea_str = html.escape(str(entry.get("reason", "")))
+            stat_str = html.escape(str(entry.get("governance_status", "")))
+            u_str = html.escape(str(entry.get("user", "system")))
+
+            table_html.append(f"""
                 <tr>
-                    <td style="white-space: nowrap; font-size: 12px;">{log_entry.get('timestamp')[:19]}</td>
-                    <td style="font-weight: 500;">{log_entry.get('action')}</td>
-                    <td style="color: #4e4d4d;">{log_entry.get('reason')}</td>
+                    <td style="font-size: 11px; color: #797776;">{t_str}</td>
+                    <td style="font-weight: 500;">{act_str}</td>
+                    <td style="color: #4e4d4d;">{rea_str}</td>
                     <td><span class="pill-badge {pill_c}">{r_lvl}</span></td>
-                    <td style="font-size: 12px;">{log_entry.get('governance_status')}</td>
+                    <td style="font-size: 11px;">{stat_str}</td>
+                    <td><code>{u_str}</code></td>
                 </tr>
-                """,
-                unsafe_allow_html=True,
-            )
+            """)
 
-        st.markdown("</tbody></table>", unsafe_allow_html=True)
+        table_html.append('  </tbody>')
+        table_html.append('</table>')
+        table_html.append('</div>')
 
+        # Render complete fixed table in ONE block
+        st.markdown("\n".join(table_html), unsafe_allow_html=True)
+
+        # Admin High-Risk Action Approval / Rejection Controls
+        if is_admin:
+            pending_high_risks = [
+                l for l in logs
+                if l.get("risk_level") in ["High", "Medium"]
+                and "Pending" in l.get("governance_status", "")
+            ]
+            if pending_high_risks:
+                with st.expander("🛡️ ADMIN GOVERNANCE: APPROVE / REJECT PENDING ACTIONS", expanded=True):
+                    st.markdown("<p style='font-size: 13px; color: #4e4d4d;'>As FedAI Administrator, you have authority to approve or reject high-risk deal actions.</p>", unsafe_allow_html=True)
+                    target_log = st.selectbox(
+                        "Select Pending Action:",
+                        options=pending_high_risks,
+                        format_func=lambda x: f"ID #{x['id']}: [{x['action']}] - {x['reason'][:50]}... ({x['risk_level']} Risk)",
+                    )
+                    c_adm1, c_adm2 = st.columns(2)
+                    with c_adm1:
+                        if st.button("✅ APPROVE HIGH-RISK ACTION", type="primary", use_container_width=True):
+                            update_audit_log_status(target_log["id"], "Approved by Administrator", current_user)
+                            st.success(f"Action #{target_log['id']} officially approved!")
+                            st.rerun()
+                    with c_adm2:
+                        if st.button("❌ REJECT HIGH-RISK ACTION", use_container_width=True):
+                            update_audit_log_status(target_log["id"], "Rejected by Administrator", current_user)
+                            st.warning(f"Action #{target_log['id']} officially rejected.")
+                            st.rerun()
+
+        # CSV Download Button
         df_logs = pd.DataFrame(logs)
         csv_logs = io.StringIO()
         df_logs.to_csv(csv_logs, index=False)
@@ -654,7 +883,7 @@ with tab_tower:
         )
         st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("No audit events recorded yet. Agent actions will appear here in real time.")
+        st.info("No audit events recorded yet for this user. Agent actions will appear here in real time.")
 
 # =============================================================================
 # TAB 5: COST & ROUTE (CORRIDOR FREIGHT ESTIMATOR)
@@ -691,6 +920,13 @@ with tab_route:
 
         if st.button("CALCULATE ROUTE BENCHMARKS ▸", type="primary", use_container_width=True):
             st.session_state["route_result"] = estimate_corridor_freight(origin_hub, dest_hub, cargo_weight)
+            audit_log_event(
+                action="Corridor Freight Estimator",
+                reason=f"Calculated transit benchmarks: {origin_hub} -> {dest_hub} ({cargo_weight} kg)",
+                risk_level="Low",
+                status="Estimated",
+                user=current_user,
+            )
 
     with col_f2:
         if "route_result" in st.session_state:
@@ -701,20 +937,20 @@ with tab_route:
             st.markdown(
                 f"""
                 <div class="monad-card" style="padding: 30px; margin-bottom: 1.5rem;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #2b59d1; letter-spacing: 0.05em;">{sea['mode']}</div>
-                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{sea['cost_aed']} <span style="font-size: 14px; color: #797776;">({sea['cost_inr']})</span></div>
+                    <div style="font-size: 11px; text-transform: uppercase; color: #2b59d1; letter-spacing: 0.05em;">{html.escape(sea['mode'])}</div>
+                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{html.escape(sea['cost_aed'])} <span style="font-size: 14px; color: #797776;">({html.escape(sea['cost_inr'])})</span></div>
                     <div style="font-size: 13px; color: #4e4d4d; margin-top: 8px;">
-                        ⏱️ <strong>Transit Window:</strong> {sea['transit_time']}<br>
-                        💡 <strong>Application:</strong> {sea['recommended_for']}
+                        ⏱️ <strong>Transit Window:</strong> {html.escape(sea['transit_time'])}<br>
+                        💡 <strong>Application:</strong> {html.escape(sea['recommended_for'])}
                     </div>
                 </div>
 
                 <div class="monad-card" style="padding: 30px;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #92400e; letter-spacing: 0.05em;">{air['mode']}</div>
-                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{air['cost_aed']} <span style="font-size: 14px; color: #797776;">({air['cost_inr']})</span></div>
+                    <div style="font-size: 11px; text-transform: uppercase; color: #92400e; letter-spacing: 0.05em;">{html.escape(air['mode'])}</div>
+                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{html.escape(air['cost_aed'])} <span style="font-size: 14px; color: #797776;">({html.escape(air['cost_inr'])})</span></div>
                     <div style="font-size: 13px; color: #4e4d4d; margin-top: 8px;">
-                        ⏱️ <strong>Transit Window:</strong> {air['transit_time']}<br>
-                        💡 <strong>Application:</strong> {air['recommended_for']}
+                        ⏱️ <strong>Transit Window:</strong> {html.escape(air['transit_time'])}<br>
+                        💡 <strong>Application:</strong> {html.escape(air['recommended_for'])}
                     </div>
                 </div>
                 """,
