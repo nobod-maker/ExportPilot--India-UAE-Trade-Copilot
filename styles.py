@@ -166,21 +166,59 @@ html, body, [data-testid="stAppViewContainer"] {
   color: #ffffff !important;
 }
 
-/* Inputs & Form Elements */
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea,
-.stSelectbox > div > div {
-  font-family: var(--font-mono) !important;
-  font-size: 13px !important;
-  border-radius: 16px !important;
-  border: 1px solid var(--border-hairline) !important;
+/* Distinct Black Outline for All Text Boxes & Inputs */
+div[data-baseweb="base-input"],
+div[data-baseweb="input"],
+div[data-baseweb="textarea"],
+.stTextInput > div > div,
+.stTextArea > div > div,
+.stNumberInput > div > div,
+.stSelectbox > div > div,
+.stSelectbox [data-baseweb="select"] > div {
+  border: 1.5px solid #111111 !important;
+  border-radius: 12px !important;
   background-color: #ffffff !important;
-  color: var(--text-primary) !important;
+  color: #111111 !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-  border-color: var(--accent-blue) !important;
+/* Ensure inner input text and textarea fill container without double border */
+div[data-baseweb="base-input"] input,
+div[data-baseweb="input"] input,
+div[data-baseweb="textarea"] textarea,
+.stTextInput input,
+.stTextArea textarea,
+.stNumberInput input,
+.stForm input {
+  border: none !important;
+  outline: none !important;
+  background-color: transparent !important;
+  color: #111111 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 13px !important;
+}
+
+/* Focused / active input state with bold black outline */
+div[data-baseweb="base-input"]:focus-within,
+div[data-baseweb="input"]:focus-within,
+div[data-baseweb="textarea"]:focus-within,
+.stTextInput > div > div:focus-within,
+.stTextArea > div > div:focus-within,
+.stNumberInput > div > div:focus-within,
+.stSelectbox > div > div:focus-within,
+.stSelectbox [data-baseweb="select"]:focus-within > div {
+  border: 2px solid #000000 !important;
+  box-shadow: 0 0 0 1px #000000 !important;
+  background-color: #ffffff !important;
+}
+
+/* General fallback for any standalone input elements */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea {
+  font-family: var(--font-mono) !important;
+  color: #111111 !important;
 }
 
 /* Navigation Tabs styled as sleek Monad pills */

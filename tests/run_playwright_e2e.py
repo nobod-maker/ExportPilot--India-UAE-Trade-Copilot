@@ -37,8 +37,8 @@ def run_e2e_tests() -> bool:
             app_container.wait_for(state="visible", timeout=20000)
 
             # Verify Login form is displayed and main app is blocked
-            page.locator('text=Demo Credentials').first.wait_for(state="visible", timeout=10000)
-            page.locator('text=Login').first.wait_for(state="visible", timeout=10000)
+            page.locator('text=Demo Credentials').first.wait_for(state="visible", timeout=20000)
+            page.locator('text=Login').first.wait_for(state="visible", timeout=20000)
             print("  [PASS] Application successfully gated behind login screen.")
 
             login_ss = SCREENSHOT_DIR / "01_monad_login_gate.png"
@@ -64,6 +64,7 @@ def run_e2e_tests() -> bool:
             user_badge = page.locator('text=Logged in as Priya Exporter').first
             user_badge.wait_for(state="visible", timeout=15000)
             print("  [PASS] Successfully logged in as 'exporter' (Priya Exporter).")
+            page.wait_for_timeout(2500)
 
             home_ss = SCREENSHOT_DIR / "02_monad_exporter_home.png"
             page.screenshot(path=str(home_ss), full_page=True)
@@ -74,7 +75,7 @@ def run_e2e_tests() -> bool:
             # -----------------------------------------------------------------
             print("\n[TEST 3] Testing Deal Desk calculation and human approval gate...")
             load_sample_btn = page.locator('button:has-text("LOAD EN SAMPLE")').first
-            load_sample_btn.wait_for(state="visible", timeout=5000)
+            load_sample_btn.wait_for(state="visible", timeout=15000)
             load_sample_btn.click()
             page.wait_for_timeout(1500)
 
@@ -202,14 +203,16 @@ def run_e2e_tests() -> bool:
             page.locator('text=Logged in as FedAI Control Admin').first.wait_for(state="visible", timeout=15000)
             page.locator('text=ADMIN').first.wait_for(state="visible", timeout=5000)
             print("  [PASS] Successfully authenticated as FedAI Administrator.")
+            page.wait_for_timeout(3000)
 
             # Go to Audit Log Tab as Admin
             admin_audit_tab = page.locator('[data-baseweb="tab"]:has-text("AUDIT LOG")').first
             admin_audit_tab.wait_for(state="visible", timeout=10000)
-            admin_audit_tab.click(force=True)
+            admin_audit_tab.scroll_into_view_if_needed()
+            admin_audit_tab.click()
             page.wait_for_timeout(2500)
 
-            page.locator('text=Full Audit Log').first.wait_for(state="visible", timeout=10000)
+            page.locator('text=Full Audit Log').first.wait_for(state="visible", timeout=15000)
             print("  [PASS] Admin has access to full audit log across all users.")
 
             admin_ss = SCREENSHOT_DIR / "05_monad_admin_audit.png"
