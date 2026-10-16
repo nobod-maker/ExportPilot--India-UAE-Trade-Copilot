@@ -2,7 +2,20 @@
 
 > **Tagline**: *Speak your deal. ExportPilot quotes it, checks the risk, and drafts the buyer message.*  
 > **Championship Category**: Best Business AI Agent (Dubai Create AI Agents Championship)  
-> **Demo**: Streamlit | **Voice**: Tamil, Hindi, English | **Operating Cost**: ₹0 (100% Free Tiers & Open Source)
+> **Live Demo**: [https://crazy-humans-jam.loca.lt](https://crazy-humans-jam.loca.lt) *(Tunnel Password / IP: `157.51.115.171`)*  
+> **Voice Ingestion**: Tamil, Hindi, English | **Operating Cost**: ₹0 (100% Free Tiers & Open Source)  
+> **GitHub Repository**: [https://github.com/nobod-maker/ExportPilot--India-UAE-Trade-Copilot.git](https://github.com/nobod-maker/ExportPilot--India-UAE-Trade-Copilot.git)
+
+---
+
+## 🔑 Demo Access & Role Credentials
+
+ExportPilot features full role-based access control (RBAC) and FedAI governance gating:
+
+| Role | Username | Password | Features & Permissions |
+| :--- | :--- | :--- | :--- |
+| **Exporter** | `exporter` | `export123` | Multilingual voice deal desk, quotation calculator, export document compiler, adversarial risk auditor, corridor freight estimator, view personal audit logs. |
+| **Administrator** | `admin` | `admin123` | Full access across all modules, view full multi-user audit log, and approve/reject high-risk pending actions. |
 
 ---
 
@@ -15,15 +28,13 @@ Small Indian MSME exporters (garments, spices, leather, agro-commodities, engine
 4. **Trade Regulatory Updates**: Tracking India–UAE CEPA (Comprehensive Economic Partnership Agreement) preferential tariffs and customs documentation.
 
 **ExportPilot** solves this as an autonomous trade copilot:
-- Ingests **multilingual voice notes** (Tamil, Hindi, English) or typed text with state-synchronized audio deduplication.
-- Fetches **live INR/AED exchange rates** (`open.er-api.com`).
-- Assesses **CEPA trade intelligence and shipping updates** (DGFT & Gulf feeds, with local cached fallback).
-- Calculates a structured quotation with an **estimated FX volatility protection buffer**.
-- Drafts culturally calibrated, professional English buyer emails.
-- **FedAI Control Tower & Audit Log**: Logs every decision with timestamp, action, rationale, risk classification, and governance state.
-- **Adversarial Risk Auditor**: Analyzes payment terms and aggressively argues why an exporter should reject hazardous terms (e.g. 100% post-delivery) or accept safe terms (LC / advance deposit).
-- **Export Document Agent**: Compiles standard export packing lists (cartons, weights, dimensions, HS codes) and UAE import CEPA compliance checklists.
+- **Vernacular Ingestion**: Speaks Tamil, Hindi, or English via faster-whisper and Gemini Multimodal audio.
+- **Live FX Intelligence**: Real-time INR/AED rates from `open.er-api.com` with automatic offline fallbacks.
+- **Estimated FX Volatility Buffer**: Automatic $2.5\%$ currency buffer calculation to protect exporter margins.
+- **Adversarial Risk Auditor**: Analyzes proposed payment terms, extracts retention percentages (e.g. 10% post-delivery vs 100% open account) and order scale, and advises why an exporter should reject hazardous terms or accept safe collateralized terms.
+- **Export Document Agent**: Compiles export packing lists (cartons, weights, dimensions, HS codes) and UAE CEPA customs clearance checklists.
 - **Corridor Freight Estimator**: Instant benchmark route transit times and freight costs (sea vs air) from Indian export hubs to Dubai/Jebel Ali.
+- **FedAI Control Tower & Audit Log**: Immutably records every decision with unified fixed `<colgroup>` HTML table geometry, risk badges, and user attribution.
 - **Enforces a strict Human-in-the-Loop (HITL) gate**: The agent prepares and calculates, but **never finalizes or saves deals without an explicit user approval click**.
 
 ---
@@ -32,8 +43,16 @@ Small Indian MSME exporters (garments, spices, leather, agro-commodities, engine
 
 ```mermaid
 flowchart TD
+    subgraph Auth_Gate ["0. Access & Governance Gate"]
+        LOGIN["Monad Login Screen (streamlit-authenticator)"]
+        ROLE{"Role Check"}
+        LOGIN --> ROLE
+        ROLE -- "Exporter" --> EXP_VIEW["Exporter Workspace"]
+        ROLE -- "Admin" --> ADM_VIEW["Admin Control & Multi-User Audit"]
+    end
+
     subgraph Input_Layer ["1. Vernacular Ingestion"]
-        V1["Tamil / Hindi / English Voice"] --> V["agent/voice.py (Gemini Multimodal Audio)"]
+        V1["Tamil / Hindi / English Voice"] --> V["agent/voice.py (Faster-Whisper / Gemini)"]
         V2["Typed Fallback Textbox"] --> Q["Standardized English Trade Query"]
         V --> Q
     end
@@ -53,9 +72,10 @@ flowchart TD
         GATE -- "Approve & Save" --> DB[("SQLite Database: data/exportpilot.db")]
     end
 
-    subgraph Analytics_Archive ["4. Storage & Impact Analytics"]
-        DB --> HIST["Deals History Table & CSV Export"]
-        DB --> IMPACT["Impact Panel: Estimated FX Buffer & Time Saved"]
+    subgraph FedAI_Governance ["4. FedAI Control Tower"]
+        GATE --> AUDIT["Immutable Audit Log with Fixed HTML Geometry"]
+        AUDIT --> DB
+        AUDIT --> ADM_GOV["Admin High-Risk Review & Approval"]
     end
 ```
 
@@ -66,10 +86,11 @@ flowchart TD
 | Capability | Component / Source | Cost |
 | :--- | :--- | :--- |
 | **LLM & Voice Engine** | Google Gemini 2.5 Flash via `google-genai` SDK | ₹0 (Free Tier) |
+| **Local Transcription** | `faster-whisper` (small / base model) | ₹0 (Local, offline) |
 | **FX Rate Feed** | `open.er-api.com/v6/latest/INR` | ₹0 (Open, no API key required) |
 | **Agent Orchestrator** | `langgraph` StateGraph | ₹0 (Open source) |
 | **Data Storage** | Local SQLite (`data/exportpilot.db`) | ₹0 (Embedded) |
-| **UI & Workbench** | Streamlit | ₹0 (Open source) |
+| **UI & Workbench** | Streamlit with Monad Design System | ₹0 (Open source) |
 | **Trade Intelligence** | DGFT / PIB Feeds + Bundled Cache | ₹0 (Open data) |
 
 ---
@@ -96,14 +117,14 @@ Judges and business stakeholders require genuine, defensible calculations rather
 
 ### 2. Clone and Install
 ```bash
-git clone https://github.com/your-username/exportpilot.git
-cd exportpilot
+git clone https://github.com/nobod-maker/ExportPilot--India-UAE-Trade-Copilot.git
+cd ExportPilot--India-UAE-Trade-Copilot
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Environment Variables (Optional for Demo)
+### 3. Environment Variables (Optional for Offline Mode)
 Create a `.env` file in the project root:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -121,31 +142,37 @@ Open `http://localhost:8501` in your browser.
 
 ## 🧪 Automated Test Suite
 
-Every tool, agent node, and database schema has automated unit tests.
+Every tool, agent node, and database schema has automated unit and end-to-end tests:
 ```bash
-python -m pytest tests/ -v
-```
+# 1. Run Core Unit & Database Tests (17 tests)
+python -m pytest tests/test_tools.py tests/test_db.py tests/test_extended.py tests/test_graph.py tests/test_risk.py tests/test_voice.py
 
-Current test suite coverage:
-- `tests/test_tools.py`: Live & fallback FX conversion, UAE buyer norms, quote formulas, and SQLite persistence.
-- `tests/test_graph.py`: LangGraph state machine, node transitions, and human approval status enforcement.
-- `tests/test_risk.py`: Trade news parsing, source attribution, and risk rating.
-- `tests/test_voice.py`: Multimodal audio processing and 30-sample vernacular benchmark evaluation.
-- `tests/test_db.py`: SQLite schema validation and audit history integrity.
+# 2. Run Playwright E2E Tests (Full browser automation)
+python tests/run_playwright_e2e.py
+```
 
 ---
 
-## ☁️ Hugging Face Spaces Deployment Guide
+## ☁️ Permanent Public Deployment
 
-Deploying ExportPilot to Hugging Face Spaces takes under 3 minutes:
+### Option A: Streamlit Community Cloud (Recommended — Free & 1-Click)
+1. Go to [share.streamlit.io](https://share.streamlit.io/) and log in with GitHub.
+2. Click **New App** and select:
+   - **Repository**: `nobod-maker/ExportPilot--India-UAE-Trade-Copilot`
+   - **Branch**: `main`
+   - **Main file path**: `app.py`
+3. In **Advanced Settings > Secrets**, paste:
+   ```toml
+   GEMINI_API_KEY = "your_key_here"
+   GEMINI_MODEL = "gemini-2.5-flash"
+   ```
+4. Click **Deploy!** Your app will be live with a permanent URL like `https://exportpilot.streamlit.app`.
 
+### Option B: Hugging Face Spaces (Free)
 1. Create a new Space on [Hugging Face](https://huggingface.co/spaces) with **Streamlit** as the SDK.
 2. Push the repository files (`app.py`, `agent/`, `data/`, `requirements.txt`, `README.md`).
-3. Add your Gemini API key in **Space Settings > Variables and secrets**:
-   - `GEMINI_API_KEY`: `AIzaSy...`
-   - `GEMINI_MODEL`: `gemini-2.5-flash`
-4. The space will automatically install `requirements.txt` and launch the live public app!
-> **Security Reminder**: Never commit your `.env` file to Git or public repositories. Use Hugging Face Secrets.
+3. Add `GEMINI_API_KEY` under **Space Settings > Variables and secrets**.
+4. The space will build and launch automatically.
 
 ---
 
