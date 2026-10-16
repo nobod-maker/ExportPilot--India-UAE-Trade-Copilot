@@ -1,12 +1,13 @@
 """ExportPilot — India-UAE Trade Copilot.
 
-A Streamlit AI Copilot for Indian exporters quoting and managing deals with UAE buyers.
-Complies with zero-cost free-tier architecture, strict Human-in-the-Loop approval,
-vernacular voice input (Tamil/Hindi/English), and live FX & trade intelligence.
+Featuring FedAI Control Tower governance, adversarial Risk Auditor,
+Export Document Agent, Freight Route Estimator, vernacular voice (Tamil/Hindi/English),
+and strict Human-in-the-Loop deal approval.
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -19,7 +20,18 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from agent.graph import run_trade_copilot
-from agent.tools import get_buyer_norms, get_deals, get_fx, get_trade_news, save_deal
+from agent.tools import (
+    audit_log_event,
+    audit_risk_assessment,
+    estimate_corridor_freight,
+    generate_packing_list_and_compliance,
+    get_audit_logs,
+    get_buyer_norms,
+    get_deals,
+    get_fx,
+    get_trade_news,
+    save_deal,
+)
 from agent.voice import SAMPLE_VERNACULAR_QUERIES, transcribe_and_translate_audio
 
 load_dotenv()
@@ -173,7 +185,27 @@ h1, h2, h3, h4, h5, h6,
     padding: 0.25rem 0.6rem;
     border-radius: 6px;
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: 700;
+}
+
+.badge-risk-high {
+    background: #fef2f2 !important;
+    color: #991b1b !important;
+    border: 1px solid #fecaca !important;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.badge-risk-med {
+    background: #fffbeb !important;
+    color: #92400e !important;
+    border: 1px solid #fde68a !important;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
 }
 
 .badge-hitl {
@@ -264,7 +296,6 @@ textarea:focus, input:focus {
     font-weight: 600 !important;
 }
 
-/* Hide default streamlit header clutter */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 </style>
@@ -283,13 +314,17 @@ def cached_news(country: str = "UAE") -> Dict[str, Any]:
 
 
 def init_session_state() -> None:
-    """Initialize application session states."""
+    """Initialize persistent session states."""
+    if "deal_query_input" not in st.session_state:
+        st.session_state.deal_query_input = "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
     if "current_deal" not in st.session_state:
         st.session_state.current_deal = None
     if "voice_meta" not in st.session_state:
         st.session_state.voice_meta = None
     if "approval_message" not in st.session_state:
         st.session_state.approval_message = None
+    if "last_processed_audio_hash" not in st.session_state:
+        st.session_state.last_processed_audio_hash = None
 
 
 init_session_state()
@@ -300,8 +335,8 @@ st.markdown(
     <div class="brand-header">
         <h1 class="brand-title">🚢 ExportPilot <span style="font-size: 1.1rem; font-weight: 400; color: #38bdf8;">| India–UAE Trade Copilot</span></h1>
         <p class="brand-subtitle">
-            Voice-driven deal quoting, CEPA tariff intelligence, live INR/AED rates, and cultural buyer negotiation drafting.
-            <span class="badge-hitl" style="margin-left: 10px;">🛡️ Zero-finalize without Human Approval</span>
+            FedAI Control Tower-governed export copilot: Voice deal quoting, CEPA tariff intelligence, live FX, and adversarial risk auditing.
+            <span class="badge-hitl" style="margin-left: 10px;">🛡️ FedAI Control Tower: Zero-finalize without Human Approval</span>
         </p>
     </div>
     """,
@@ -347,9 +382,20 @@ with st.sidebar:
     st.caption("Dubai Create AI Agents Championship | Cost: ₹0")
 
 
-# Main Workspace Tabs
-tab_quote, tab_history, tab_benchmarks = st.tabs(["💬 Deal Copilot Workbench", "📜 Deals History & Audit", "🧪 Vernacular Test Bench"])
+# Workspace Navigation
+tab_quote, tab_risk_auditor, tab_docs, tab_freight, tab_tower, tab_history, tab_benchmarks = st.tabs([
+    "💬 Deal Copilot",
+    "🛡️ Risk Auditor",
+    "📄 Document Agent",
+    "🚢 Freight Estimator",
+    "🗼 FedAI Control Tower",
+    "📜 Deals Archive",
+    "🧪 Vernacular Test Bench",
+])
 
+# -------------------------------------------------------------
+# TAB 1: DEAL COPILOT WORKBENCH
+# -------------------------------------------------------------
 with tab_quote:
     col_input, col_info = st.columns([1.2, 0.8], gap="large")
 
@@ -357,30 +403,43 @@ with tab_quote:
         st.markdown("#### 1. Speak or Enter Your Deal Request")
         st.caption("Accepts Tamil (தமிழ்), Hindi (हिन्दी), or English voice notes & text.")
 
-        # Voice Input Component with Safe Error Handling
+        # Safe Voice Input with Audio Hash Deduplication
         try:
             audio_val = st.audio_input("🎙️ Record Voice Request")
             if audio_val is not None:
                 audio_bytes = audio_val.read()
-                with st.spinner("Processing speech via Gemini..."):
-                    v_res = transcribe_and_translate_audio(audio_bytes)
-                    if v_res and v_res.get("english"):
-                        st.session_state.voice_meta = v_res
-                    else:
-                        st.warning("Speech not detected clearly. Please type your deal below.")
+                audio_hash = hashlib.md5(audio_bytes).hexdigest()
+                # Process audio only if it has not been processed yet
+                if st.session_state.last_processed_audio_hash != audio_hash:
+                    with st.spinner("Processing speech via Gemini..."):
+                        v_res = transcribe_and_translate_audio(audio_bytes)
+                        st.session_state.last_processed_audio_hash = audio_hash
+                        if v_res and v_res.get("english"):
+                            st.session_state.voice_meta = v_res
+                            st.session_state.deal_query_input = v_res["english"]
+                            # Log to Control Tower
+                            audit_log_event(
+                                action="Multilingual Voice Ingestion",
+                                reason=f"Transcribed speech in [{v_res.get('language')}] -> English trade query",
+                                risk_level="Low",
+                                status="Transcribed",
+                            )
+                            st.rerun()
+                        else:
+                            st.warning("Speech not detected clearly. Please type your deal below.")
         except Exception as mic_err:
             st.warning("Mic unavailable. Please type your request below or check microphone permissions.")
 
         st.markdown(
             """
             <p style="font-size: 0.78rem; color: #64748b; margin-top: -6px; margin-bottom: 12px;">
-                🔒 <em>Tip: If your browser shows 'An error has occurred', click the lock icon left of <strong>localhost:8501</strong>, set <strong>Microphone → Allow</strong>, and reload. Or simply type your request in the box below.</em>
+                🔒 <em>Tip: If browser shows 'An error has occurred', click the lock icon left of <strong>localhost:8501</strong>, set <strong>Microphone → Allow</strong>, and reload. Or simply type your request in the box below.</em>
             </p>
             """,
             unsafe_allow_html=True,
         )
 
-        # If voice was recorded or loaded, show transcription badge
+        # Show detected voice translation badge if available
         if st.session_state.voice_meta:
             vm = st.session_state.voice_meta
             st.info(
@@ -388,35 +447,38 @@ with tab_quote:
                 f"**Translated Request:** *\"{vm['english']}\"*"
             )
 
-        # Typed Fallback Box
-        default_query_text = (
-            st.session_state.voice_meta.get("english", "")
-            if st.session_state.voice_meta
-            else "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
-        )
-
+        # Synchronized Text Area (bound to session_state)
         query_text = st.text_area(
             "Exporter Deal Request (English):",
-            value=default_query_text,
+            key="deal_query_input",
             height=90,
             help="Type or edit the deal instructions here.",
         )
 
-        # Quick preset buttons for instant evaluation
+        # Quick preset buttons (Instant execution without conflict)
         st.markdown("<p style='font-size: 0.82rem; color: #475569; font-weight: 600; margin-bottom: 0.35rem;'>Or select quick sample scenario:</p>", unsafe_allow_html=True)
         q_cols = st.columns(3)
         with q_cols[0]:
             if st.button("👕 500 Cotton Shirts (Dubai)", use_container_width=True):
-                query_text = "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
+                st.session_state.deal_query_input = "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
                 st.session_state.voice_meta = None
+                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
+                audit_log_event("Sample Scenario Loaded", "Loaded 500 Cotton Shirts (Dubai)", "Low", "Loaded")
+                st.rerun()
         with q_cols[1]:
             if st.button("🌶️ 1000 kg Cardamom (UAE)", use_container_width=True):
-                query_text = "Quote 1000 kg Grade-A Cardamom to UAE buyer at 1800 INR per kg, 30% advance"
+                st.session_state.deal_query_input = "Quote 1000 kg Grade-A Cardamom to UAE buyer at 1800 INR per kg, 30% advance"
                 st.session_state.voice_meta = None
+                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
+                audit_log_event("Sample Scenario Loaded", "Loaded 1000 kg Cardamom (UAE)", "Low", "Loaded")
+                st.rerun()
         with q_cols[2]:
             if st.button("👜 300 Leather Bags (Abu Dhabi)", use_container_width=True):
-                query_text = "Quote 300 genuine leather bags to Abu Dhabi distributor at 1200 INR each"
+                st.session_state.deal_query_input = "Quote 300 genuine leather bags to Abu Dhabi distributor at 1200 INR each"
                 st.session_state.voice_meta = None
+                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
+                audit_log_event("Sample Scenario Loaded", "Loaded 300 Leather Bags (Abu Dhabi)", "Low", "Loaded")
+                st.rerun()
 
         if st.button("⚡ Run ExportPilot Agent", type="primary", use_container_width=True):
             if query_text.strip():
@@ -424,6 +486,13 @@ with tab_quote:
                     result = run_trade_copilot(query_text)
                     st.session_state.current_deal = result
                     st.session_state.approval_message = None
+                    audit_log_event(
+                        action="Deal Analysis & Quote Calculation",
+                        reason=f"Processed exporter query: {query_text[:60]}... Total AED: {result.get('quote_data', {}).get('total_target')}",
+                        risk_level="Medium",
+                        status="Pending Human Approval",
+                    )
+                    st.rerun()
             else:
                 st.warning("Please enter or speak a deal request first.")
 
@@ -552,19 +621,220 @@ with tab_quote:
                         "status": "approved",
                     }
                     new_id = save_deal(deal_record)
-                    st.session_state.approval_message = f"Deal #{new_id} successfully approved and saved to database! Check 'Deals History' tab."
+                    audit_log_event(
+                        action="Deal Approved & Archived",
+                        reason=f"User approved deal #{new_id} ({q_data.get('item')}, Total: AED {q_data.get('total_target')})",
+                        risk_level="Low",
+                        status="Human Approved",
+                        deal_id=new_id,
+                    )
+                    st.session_state.approval_message = f"Deal #{new_id} successfully approved and saved to database! Check 'Deals Archive' tab."
                     st.success(st.session_state.approval_message)
 
             with btn_col2:
                 if st.button("❌ Discard Draft", use_container_width=True):
                     st.session_state.current_deal = None
                     st.session_state.approval_message = "Quotation draft discarded. Nothing was saved."
+                    audit_log_event(
+                        action="Deal Discarded",
+                        reason="User rejected quotation draft; zero changes committed",
+                        risk_level="Low",
+                        status="Discarded",
+                    )
                     st.rerun()
 
             if st.session_state.approval_message:
                 st.caption(f"Status: {st.session_state.approval_message}")
 
 
+# -------------------------------------------------------------
+# TAB 2: ADVERSARIAL RISK AUDITOR
+# -------------------------------------------------------------
+with tab_risk_auditor:
+    st.markdown("#### 🛡️ Adversarial Risk Auditor")
+    st.caption("Argues aggressively why an Indian exporter should NOT accept hazardous deal terms, protecting you against payment default.")
+
+    col_r1, col_r2 = st.columns([1.2, 0.8], gap="large")
+
+    with col_r1:
+        risk_input = st.text_area(
+            "Enter deal proposal to audit for risk:",
+            value="The buyer wants 100% payment after delivery and is a new customer ordering 2000 units.",
+            height=80,
+        )
+
+        c_presets = st.columns(2)
+        with c_presets[0]:
+            if st.button("⚠️ Test Bad Deal (100% Post-Delivery)", use_container_width=True):
+                risk_input = "Buyer wants 100% payment after delivery at Dubai port for a new customer."
+        with c_presets[1]:
+            if st.button("✅ Test Safe Deal (50% LC Advance)", use_container_width=True):
+                risk_input = "Buyer pays 50% advance via Letter of Credit and has ordered 3 times before."
+
+        if st.button("🔍 Run Adversarial Risk Audit", type="primary", use_container_width=True):
+            audit_res = audit_risk_assessment(risk_input)
+            st.session_state["last_audit_res"] = audit_res
+
+    with col_r2:
+        if "last_audit_res" in st.session_state:
+            res = st.session_state["last_audit_res"]
+            lvl = res["risk_level"]
+            badge_class = "badge-risk-high" if lvl == "High" else ("badge-risk-med" if lvl == "Medium" else "badge-risk-low")
+
+            st.markdown(
+                f"""
+                <div class="metric-box" style="margin-top: 0.5rem; border-left: 4px solid {'#ef4444' if lvl=='High' else '#10b981'};">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="metric-label">Auditor Verdict</span>
+                        <span class="{badge_class}">Risk Level: {lvl.upper()}</span>
+                    </div>
+                    <div style="font-size: 1.1rem; font-weight: 800; color: {'#991b1b' if lvl=='High' else '#166534'}; margin-top: 0.35rem;">
+                        {res['recommendation']}
+                    </div>
+                    <ul style="font-size: 0.85rem; color: #1e293b; margin-top: 0.75rem; padding-left: 1.2rem; line-height: 1.5;">
+                        {''.join(f'<li>{r}</li>' for r in res['reasons'])}
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Click 'Run Adversarial Risk Audit' to inspect the risk evaluation.")
+
+
+# -------------------------------------------------------------
+# TAB 3: EXPORT DOCUMENT AGENT
+# -------------------------------------------------------------
+with tab_docs:
+    st.markdown("#### 📄 Export Document Agent (Packing List & Compliance)")
+    st.caption("Instantly compiles export packing lists, carton estimates, and UAE CEPA customs clearance checklists.")
+
+    doc_c1, doc_c2 = st.columns([1, 1], gap="large")
+
+    with doc_c1:
+        doc_item = st.text_input("Item Description", value="100% Combed Cotton T-Shirts")
+        doc_qty = st.number_input("Quantity Units", min_value=1.0, value=500.0, step=50.0)
+        doc_price = st.number_input("Unit Price (INR)", min_value=1.0, value=350.0, step=10.0)
+
+        if st.button("📑 Generate Packing List & CEPA Checklist", type="primary", use_container_width=True):
+            docs = generate_packing_list_and_compliance(doc_item, doc_qty, doc_price)
+            st.session_state["generated_docs"] = docs
+
+    with doc_c2:
+        if "generated_docs" in st.session_state:
+            d_out = st.session_state["generated_docs"]
+            pkl = d_out["packing_list"]
+
+            st.markdown("##### 📦 Export Packing Specification")
+            st.markdown(
+                f"""
+                <div class="quote-sheet" style="font-size: 0.88rem;">
+                    <strong>Item:</strong> {pkl['item']} (HS Code: <code>{pkl['hs_code']}</code>)<br>
+                    <strong>Total Packages:</strong> {pkl['total_packages']} ({pkl['package_type']})<br>
+                    <strong>Net Weight:</strong> {pkl['net_weight']} | <strong>Gross Weight:</strong> {pkl['gross_weight']}<br>
+                    <strong>Carton Dimensions:</strong> {pkl['dimensions']}<br>
+                    <strong>Shipping Marks:</strong> <code>{pkl['marks_and_numbers']}</code>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("##### 🇦🇪 UAE CEPA Import Compliance Checklist")
+            df_comp = pd.DataFrame(d_out["compliance_checklist"])
+            st.dataframe(df_comp, use_container_width=True)
+        else:
+            st.info("Click 'Generate Packing List' to compile shipment documents.")
+
+
+# -------------------------------------------------------------
+# TAB 4: FREIGHT & ROUTE ESTIMATOR
+# -------------------------------------------------------------
+with tab_freight:
+    st.markdown("#### 🚢 India–UAE Corridor Freight & Route Estimator")
+    st.caption("Benchmark direct transit times and container/air freight rates between key Indian export hubs and Dubai.")
+
+    f_col1, f_col2 = st.columns([1, 1], gap="large")
+
+    with f_col1:
+        origin_hub = st.selectbox(
+            "Select Indian Origin Port / Hub:",
+            ["Nhava Sheva / JNPT (Mumbai)", "Chennai Port (Tamil Nadu)", "Mundra Port (Gujarat)", "Cochin Port (Kerala)", "IGI Cargo Hub (Delhi - Air)"],
+        )
+        dest_hub = "Jebel Ali Port / DXB (Dubai, UAE)"
+        cargo_wt = st.number_input("Estimated Cargo Weight (KG):", min_value=10.0, value=500.0, step=50.0)
+
+        if st.button("📊 Calculate Freight & Route Options", type="primary", use_container_width=True):
+            f_res = estimate_corridor_freight(origin_hub, dest_hub, cargo_wt)
+            st.session_state["freight_estimate"] = f_res
+
+    with f_col2:
+        if "freight_estimate" in st.session_state:
+            fe = st.session_state["freight_estimate"]
+            sea = fe["sea_freight"]
+            air = fe["air_freight"]
+
+            st.markdown(
+                f"""
+                <div class="metric-box" style="margin-bottom: 1rem; border-left: 4px solid #0284c7;">
+                    <div class="metric-label">{sea['mode']}</div>
+                    <div class="metric-val" style="color: #0284c7;">{sea['cost_aed']} <span style="font-size: 0.9rem; font-weight: normal; color: #475569;">({sea['cost_inr']})</span></div>
+                    <div style="font-size: 0.85rem; color: #1e293b; margin-top: 0.35rem;">
+                        ⏱️ <strong>Transit Time:</strong> {sea['transit_time']}<br>
+                        💡 <strong>Best for:</strong> {sea['recommended_for']}
+                    </div>
+                </div>
+
+                <div class="metric-box" style="border-left: 4px solid #f59e0b;">
+                    <div class="metric-label">{air['mode']}</div>
+                    <div class="metric-val" style="color: #b45309;">{air['cost_aed']} <span style="font-size: 0.9rem; font-weight: normal; color: #475569;">({air['cost_inr']})</span></div>
+                    <div style="font-size: 0.85rem; color: #1e293b; margin-top: 0.35rem;">
+                        ⏱️ <strong>Transit Time:</strong> {air['transit_time']}<br>
+                        💡 <strong>Best for:</strong> {air['recommended_for']}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Select an origin hub and click 'Calculate Freight' to view shipping routes.")
+
+
+# -------------------------------------------------------------
+# TAB 5: FedAI CONTROL TOWER & AUDIT LOG
+# -------------------------------------------------------------
+with tab_tower:
+    st.markdown("#### 🗼 FedAI Control Tower (UAE Federal AI Governance Layer)")
+    st.caption("Air traffic control for autonomous trade agents: Immutable log of every action, rationale, risk classification, and approval state.")
+
+    st.markdown(
+        """
+        <div style="background: #0f172a; color: #f8fafc; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.88rem;">
+            <strong>UAE FedAI Standard Alignment:</strong> All agent decisions are tracked with auditable rationales. High and medium-risk decisions require explicit human authorization before execution.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    logs = get_audit_logs(limit=100)
+    if logs:
+        df_logs = pd.DataFrame(logs)
+        st.dataframe(df_logs, use_container_width=True)
+
+        csv_logs = io.StringIO()
+        df_logs.to_csv(csv_logs, index=False)
+        st.download_button(
+            "📥 Download Control Tower Audit Logs (CSV)",
+            data=csv_logs.getvalue(),
+            file_name=f"fedai_control_tower_logs_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
+    else:
+        st.info("No audit entries yet. Actions taken across the copilot will automatically populate this log.")
+
+
+# -------------------------------------------------------------
+# TAB 6: DEALS ARCHIVE
+# -------------------------------------------------------------
 with tab_history:
     st.markdown("#### 📜 Archive of Approved Deals")
     st.caption("Every record in this database underwent mandatory explicit human approval before persistence.")
@@ -588,7 +858,6 @@ with tab_history:
         available_cols = [c for c in display_cols if c in df_deals.columns]
         st.dataframe(df_deals[available_cols], use_container_width=True)
 
-        # CSV Export
         csv_buffer = io.StringIO()
         df_deals.to_csv(csv_buffer, index=False)
         st.download_button(
@@ -609,9 +878,12 @@ with tab_history:
             with st.expander("View Saved Buyer Message Draft", expanded=True):
                 st.text(selected_rec["buyer_message"])
     else:
-        st.info("No approved deals saved yet. Use the 'Deal Copilot Workbench' tab to generate and approve your first deal.")
+        st.info("No approved deals saved yet. Use the 'Deal Copilot' tab to generate and approve your first deal.")
 
 
+# -------------------------------------------------------------
+# TAB 7: VERNACULAR BENCHMARKS
+# -------------------------------------------------------------
 with tab_benchmarks:
     st.markdown("#### 🧪 Vernacular Multi-Language Test Bench (Tamil, Hindi, English)")
     st.caption("Demonstrating ExportPilot's multilingual audio and text capability across 30 curated trade queries.")
@@ -631,11 +903,19 @@ with tab_benchmarks:
                 st.markdown(f"**English Translation:**\n*{item['english']}*")
             with c3:
                 if st.button(f"Load #{idx}", key=f"btn_bench_{lang_key}_{idx}"):
+                    st.session_state.deal_query_input = item["english"]
                     st.session_state.voice_meta = {
                         "language": lang_key,
                         "transcript": item["transcript"],
                         "english": item["english"],
                     }
                     st.session_state.current_deal = run_trade_copilot(item["english"])
+                    audit_log_event(
+                        action="Vernacular Benchmark Scenario Loaded",
+                        reason=f"Loaded [{lang_key}] scenario #{idx}: '{item['transcript'][:40]}...'",
+                        risk_level="Low",
+                        status="Loaded",
+                    )
                     st.success(f"Loaded scenario #{idx} into Deal Copilot Workbench!")
+                    st.rerun()
             st.markdown("---")
