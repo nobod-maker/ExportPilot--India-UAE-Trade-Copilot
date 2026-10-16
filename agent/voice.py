@@ -1,33 +1,40 @@
-"""Voice processing module for ExportPilot.
+"""Robust voice processing pipeline for ExportPilot.
 
-Handles Tamil, Hindi, and English vernacular speech ingestion,
-transcription, language detection, and English translation via Gemini multimodal audio.
+Converts arbitrary audio formats (WAV, MP3, M4A, OGG, OPUS, WEBM) to 16 kHz mono
+float32 numpy samples via pydub and static-ffmpeg, bypassing container decoding bugs,
+and transcribes locally using faster-whisper with language selection and translation.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+import sys
+import traceback
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-VOICE_SYSTEM_INSTRUCTION = """Transcribe this audio exactly. Detect the language ('ta' for Tamil, 'hi' for Hindi, or 'en' for English).
-Then translate the exact meaning into clear trade English.
-Return ONLY a valid JSON object with these exact keys:
-{
-  "language": "ta|hi|en",
-  "transcript": "Original transcript in the native spoken script or romanized text",
-  "english": "Fluent English translation stating the export trade request"
-}
-Do not include markdown codeblocks (```json) or conversational text. Return valid JSON only.
-"""
+# Configure static-ffmpeg for pydub
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+    from pydub import AudioSegment
+    from pydub.utils import which
+    AudioSegment.converter = which("ffmpeg")
+    AudioSegment.ffprobe = which("ffprobe")
+except Exception as exc:
+    logger.debug("static_ffmpeg initialization notice: %s", exc)
 
-# Benchmark dataset: 10 Tamil, 10 Hindi, and 10 English sample trade sentences
+# Cached singleton WhisperModel instance
+_WHISPER_MODELS: Dict[str, Any] = {}
+
 SAMPLE_VERNACULAR_QUERIES: Dict[str, List[Dict[str, str]]] = {
     "ta": [
         {
@@ -158,56 +165,200 @@ SAMPLE_VERNACULAR_QUERIES: Dict[str, List[Dict[str, str]]] = {
 }
 
 
+def get_whisper_model(model_size: str = "base") -> Any:
+    """Retrieve or lazily initialize the faster-whisper model on CPU."""
+    global _WHISPER_MODELS
+    if model_size not in _WHISPER_MODELS:
+        from faster_whisper import WhisperModel
+        logger.info("Initializing faster-whisper model: %s on CPU (int8)...", model_size)
+        _WHISPER_MODELS[model_size] = WhisperModel(model_size, device="cpu", compute_type="int8")
+    return _WHISPER_MODELS[model_size]
+
+
+def audio_bytes_to_float32_samples(
+    audio_bytes: bytes,
+    format_hint: Optional[str] = None,
+) -> Tuple[np.ndarray, float]:
+    """Decode audio into 16 kHz mono float32 numpy array.
+
+    Bypasses PyAV container bugs by providing direct PCM float32 samples to whisper.
+    """
+    from pydub import AudioSegment
+
+    buffer = io.BytesIO(audio_bytes)
+    if format_hint:
+        fmt = format_hint.lower().replace(".", "").strip()
+        if fmt in ["opus", "webm", "audio/webm", "video/webm"]:
+            fmt = "webm"
+        elif fmt in ["mp3", "audio/mp3", "audio/mpeg"]:
+            fmt = "mp3"
+        elif fmt in ["m4a", "audio/m4a", "audio/x-m4a"]:
+            fmt = "m4a"
+        elif fmt in ["ogg", "audio/ogg"]:
+            fmt = "ogg"
+        elif fmt in ["wav", "audio/wav", "audio/x-wav"]:
+            fmt = "wav"
+        try:
+            audio = AudioSegment.from_file(buffer, format=fmt)
+        except Exception:
+            buffer.seek(0)
+            audio = AudioSegment.from_file(buffer)
+    else:
+        audio = AudioSegment.from_file(buffer)
+
+    # Convert to 16,000 Hz, 1 channel (mono)
+    audio = audio.set_frame_rate(16000).set_channels(1)
+    duration_sec = len(audio) / 1000.0
+
+    raw_samples = np.array(audio.get_array_of_samples())
+    if audio.sample_width == 2:
+        float_samples = raw_samples.astype(np.float32) / 32768.0
+    elif audio.sample_width == 4:
+        float_samples = raw_samples.astype(np.float32) / 2147483648.0
+    elif audio.sample_width == 1:
+        float_samples = (raw_samples.astype(np.float32) - 128.0) / 128.0
+    else:
+        float_samples = raw_samples.astype(np.float32) / (2 ** (audio.sample_width * 8 - 1))
+
+    return float_samples, duration_sec
+
+
+def translate_text_to_english(text: str, source_lang: str) -> str:
+    """Translate native vernacular transcript to English via Gemini or Whisper."""
+    if not text or source_lang == "en":
+        return text
+
+    # Try Gemini Flash if API key is configured
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key and not api_key.startswith("your_") and len(api_key) > 10:
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+            resp = client.models.generate_content(
+                model=model_name,
+                contents=f"Translate this export trade request from {source_lang} into clear, professional trade English. Return only the translated English sentence:\n\n{text}",
+            )
+            if resp and resp.text:
+                return resp.text.strip().strip('"')
+        except Exception as exc:
+            logger.warning("Gemini translation fallback notice: %s", exc)
+
+    return text
+
+
+def transcribe_audio_pipeline(
+    audio_bytes: bytes,
+    language_choice: str = "Auto-detect",
+    model_size: str = "base",
+    format_hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Execute end-to-end voice pipeline using local faster-whisper.
+
+    Converts audio to 16 kHz float32 samples, runs local whisper model,
+    detects language, and translates to English.
+    """
+    if not audio_bytes or len(audio_bytes) < 100:
+        return {
+            "success": False,
+            "error": "No audio received or recording is too short. Please speak clearly for at least 2 seconds.",
+            "transcript": "",
+            "english": "",
+            "duration_sec": 0.0,
+            "byte_size": len(audio_bytes) if audio_bytes else 0,
+        }
+
+    lang_code = None
+    if language_choice == "English":
+        lang_code = "en"
+    elif language_choice == "Hindi":
+        lang_code = "hi"
+    elif language_choice == "Tamil":
+        lang_code = "ta"
+
+    try:
+        # 1. Convert to 16kHz float32 numpy array
+        samples, duration_sec = audio_bytes_to_float32_samples(audio_bytes, format_hint=format_hint)
+
+        if len(samples) == 0:
+            return {
+                "success": False,
+                "error": "Audio decoded to 0 samples. Please check microphone or file format.",
+                "transcript": "",
+                "english": "",
+                "duration_sec": 0.0,
+                "byte_size": len(audio_bytes),
+            }
+
+        # 2. Transcribe with local faster-whisper
+        model = get_whisper_model(model_size=model_size)
+
+        segments, info = model.transcribe(
+            samples,
+            language=lang_code,
+            task="transcribe",
+            beam_size=5,
+        )
+
+        transcript_parts = [seg.text.strip() for seg in segments if seg.text.strip()]
+        full_transcript = " ".join(transcript_parts).strip()
+
+        if not full_transcript:
+            return {
+                "success": False,
+                "error": "No speech detected in audio. Please check your microphone input volume and speak clearly.",
+                "transcript": "",
+                "english": "",
+                "duration_sec": duration_sec,
+                "byte_size": len(audio_bytes),
+            }
+
+        detected_lang = info.language
+        lang_map = {"en": "English", "hi": "Hindi", "ta": "Tamil"}
+        lang_name = lang_map.get(detected_lang, detected_lang.upper())
+
+        # 3. Translate to English if needed
+        english_text = translate_text_to_english(full_transcript, detected_lang)
+
+        return {
+            "success": True,
+            "language": detected_lang,
+            "language_name": lang_name,
+            "duration_sec": round(duration_sec, 2),
+            "byte_size": len(audio_bytes),
+            "transcript": full_transcript,
+            "english": english_text,
+            "error": None,
+        }
+
+    except Exception as exc:
+        err_msg = f"Audio pipeline error: {exc}"
+        logger.error(err_msg)
+        traceback.print_exc(file=sys.stderr)
+        return {
+            "success": False,
+            "error": err_msg,
+            "transcript": "",
+            "english": "",
+            "duration_sec": 0.0,
+            "byte_size": len(audio_bytes),
+        }
+
+
 def transcribe_and_translate_audio(
     audio_bytes: bytes,
     mime_type: str = "audio/wav",
 ) -> Dict[str, str]:
-    """Process voice audio via Gemini Flash multimodal audio API with fallback.
-
-    Args:
-        audio_bytes: Raw audio byte payload.
-        mime_type: Audio MIME type (e.g. 'audio/wav', 'audio/mp3', 'audio/ogg').
-
-    Returns:
-        Dict with keys: language, transcript, english.
-    """
-    api_key = os.getenv("GEMINI_API_KEY")
-
-    if api_key and not api_key.startswith("your_") and len(api_key) > 10:
-        try:
-            from google import genai
-            from google.genai import types
-
-            client = genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-
-            part = types.Part.from_bytes(
-                data=audio_bytes,
-                mime_type=mime_type,
-            )
-
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[part, "Process this voice note according to instructions."],
-                config=types.GenerateContentConfig(
-                    system_instruction=VOICE_SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                ),
-            )
-
-            if response and response.text:
-                result = json.loads(response.text.strip())
-                return {
-                    "language": result.get("language", "en"),
-                    "transcript": result.get("transcript", ""),
-                    "english": result.get("english", ""),
-                }
-        except Exception as exc:
-            logger.warning("Gemini multimodal audio processing failed (%s). Using fallback.", exc)
-
-    # Clean simulated fallback when running without Gemini API key
+    """Compatibility wrapper returning language, transcript, english dict."""
+    res = transcribe_audio_pipeline(audio_bytes, format_hint=mime_type)
+    if res.get("success"):
+        return {
+            "language": res.get("language", "en"),
+            "transcript": res.get("transcript", ""),
+            "english": res.get("english", ""),
+        }
     return {
         "language": "en",
-        "transcript": "Audio received (Gemini API key required for live multimodal audio inference).",
-        "english": "Quote 500 cotton shirts to a Dubai buyer at 350 INR each CIF Jebel Ali.",
+        "transcript": res.get("error", "No speech detected"),
+        "english": "",
     }

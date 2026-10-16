@@ -1,8 +1,8 @@
 """ExportPilot — India-UAE Trade Copilot.
 
-Featuring FedAI Control Tower governance, adversarial Risk Auditor,
-Export Document Agent, Freight Route Estimator, vernacular voice (Tamil/Hindi/English),
-and strict Human-in-the-Loop deal approval.
+Monad Editorial Design System on warm parchment (#f6f3f1) with faster-whisper
+local speech processing (Tamil, Hindi, English), FedAI Control Tower governance,
+adversarial Risk Auditor, Export Document Agent, and Freight Route Estimator.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -32,275 +32,24 @@ from agent.tools import (
     get_trade_news,
     save_deal,
 )
-from agent.voice import SAMPLE_VERNACULAR_QUERIES, transcribe_and_translate_audio
+from agent.voice import (
+    SAMPLE_VERNACULAR_QUERIES,
+    transcribe_audio_pipeline,
+)
+from styles import load_monad_styles
 
 load_dotenv()
 
-# Streamlit Page Setup
+# Streamlit Page Configuration
 st.set_page_config(
-    page_title="ExportPilot | India–UAE Trade Copilot",
+    page_title="ExportPilot · India–UAE Trade Copilot",
     page_icon="🚢",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Custom High-End Executive Styling (Theme-Independent Anti-Slop CSS)
-CUSTOM_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
-/* Force light root canvas regardless of browser theme */
-html, body, .stApp, [data-testid="stAppViewContainer"], .main, .block-container {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    background-color: #f8fafc !important;
-    color: #0f172a !important;
-}
-
-code, kbd, samp, pre {
-    font-family: 'JetBrains Mono', monospace !important;
-}
-
-/* Explicit text color for all headings and text elements in main area */
-h1, h2, h3, h4, h5, h6,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6,
-.stMarkdown p, .stMarkdown span, .stMarkdown div, .stMarkdown li,
-[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] span {
-    color: #0f172a !important;
-}
-
-.stCaption, [data-testid="stMarkdownContainer"] small {
-    color: #475569 !important;
-    font-size: 0.85rem !important;
-}
-
-/* Sidebar Explicit Theming */
-[data-testid="stSidebar"] {
-    background-color: #0f172a !important;
-    border-right: 1px solid #1e293b !important;
-}
-
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] h4, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
-    color: #f8fafc !important;
-}
-
-[data-testid="stSidebar"] .metric-box {
-    background: #1e293b !important;
-    border: 1px solid #334155 !important;
-}
-
-[data-testid="stSidebar"] .metric-box .metric-label {
-    color: #94a3b8 !important;
-}
-
-[data-testid="stSidebar"] .metric-box .metric-val {
-    color: #f8fafc !important;
-}
-
-[data-testid="stSidebar"] .metric-box .metric-sub {
-    color: #38bdf8 !important;
-}
-
-/* Header Banner */
-.brand-header {
-    background: #0f172a !important;
-    color: #f8fafc !important;
-    padding: 1.5rem 2rem;
-    border-radius: 12px;
-    margin-bottom: 1.5rem;
-    border-left: 6px solid #0284c7;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
-}
-
-.brand-title {
-    font-size: 1.85rem !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.025em;
-    margin: 0 !important;
-    color: #ffffff !important;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.brand-subtitle {
-    font-size: 0.95rem !important;
-    color: #94a3b8 !important;
-    margin-top: 0.35rem !important;
-    margin-bottom: 0 !important;
-}
-
-/* Metric / Status Cards in Main View */
-.metric-box {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 10px;
-    padding: 1.1rem 1.25rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-}
-
-.metric-box * {
-    color: #0f172a !important;
-}
-
-.metric-label {
-    font-size: 0.78rem !important;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #475569 !important;
-    font-weight: 700 !important;
-}
-
-.metric-val {
-    font-size: 1.45rem !important;
-    font-weight: 700 !important;
-    color: #0f172a !important;
-    margin-top: 0.25rem;
-}
-
-.metric-sub {
-    font-size: 0.82rem !important;
-    color: #0284c7 !important;
-    margin-top: 0.15rem;
-}
-
-/* Status Badges */
-.badge-live {
-    background: #ecfdf5 !important;
-    color: #065f46 !important;
-    border: 1px solid #a7f3d0 !important;
-    padding: 0.2rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    display: inline-block;
-}
-
-.badge-risk-low {
-    background: #f0fdf4 !important;
-    color: #166534 !important;
-    border: 1px solid #bbf7d0 !important;
-    padding: 0.25rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 700;
-}
-
-.badge-risk-high {
-    background: #fef2f2 !important;
-    color: #991b1b !important;
-    border: 1px solid #fecaca !important;
-    padding: 0.25rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 700;
-}
-
-.badge-risk-med {
-    background: #fffbeb !important;
-    color: #92400e !important;
-    border: 1px solid #fde68a !important;
-    padding: 0.25rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 700;
-}
-
-.badge-hitl {
-    background: #fffbeb !important;
-    color: #b45309 !important;
-    border: 1px solid #fde68a !important;
-    padding: 0.2rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-/* Quote Sheet Container & High-Contrast Table */
-.quote-sheet {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 10px;
-    padding: 1.25rem 1.5rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-}
-
-.quote-sheet table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.quote-sheet table tr {
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.quote-label {
-    padding: 8px 0;
-    color: #475569 !important;
-    font-weight: 600 !important;
-    font-size: 0.92rem !important;
-}
-
-.quote-val {
-    padding: 8px 0;
-    color: #0f172a !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    text-align: right;
-}
-
-.quote-val-accent {
-    padding: 8px 0;
-    color: #0284c7 !important;
-    font-weight: 800 !important;
-    font-size: 1.05rem !important;
-    text-align: right;
-}
-
-.quote-val-total {
-    padding: 10px 0;
-    color: #0f172a !important;
-    font-weight: 800 !important;
-    font-size: 1.2rem !important;
-    text-align: right;
-}
-
-.section-label {
-    font-size: 0.92rem !important;
-    font-weight: 700 !important;
-    color: #1e293b !important;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.75rem;
-}
-
-/* Input / Textarea Contrast Override */
-textarea, input, [data-baseweb="textarea"] textarea {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1px solid #94a3b8 !important;
-    border-radius: 8px !important;
-    font-size: 0.95rem !important;
-}
-
-textarea:focus, input:focus {
-    border-color: #0284c7 !important;
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
-}
-
-/* Buttons */
-.stButton > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-}
-
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+# Apply Monad Editorial Stylesheet
+load_monad_styles()
 
 
 @st.cache_data(ttl=600)
@@ -317,257 +66,335 @@ def init_session_state() -> None:
     """Initialize persistent session states."""
     if "deal_query_input" not in st.session_state:
         st.session_state.deal_query_input = "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
+    if "editable_transcript" not in st.session_state:
+        st.session_state.editable_transcript = ""
+    if "detected_voice_meta" not in st.session_state:
+        st.session_state.detected_voice_meta = None
     if "current_deal" not in st.session_state:
         st.session_state.current_deal = None
-    if "voice_meta" not in st.session_state:
-        st.session_state.voice_meta = None
     if "approval_message" not in st.session_state:
         st.session_state.approval_message = None
     if "last_processed_audio_hash" not in st.session_state:
         st.session_state.last_processed_audio_hash = None
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = 0
 
 
 init_session_state()
 
-# Header Display
+# -----------------------------------------------------------------------------
+# 1. TOP ANNOUNCEMENT BAR
+# -----------------------------------------------------------------------------
 st.markdown(
     """
-    <div class="brand-header">
-        <h1 class="brand-title">🚢 ExportPilot <span style="font-size: 1.1rem; font-weight: 400; color: #38bdf8;">| India–UAE Trade Copilot</span></h1>
-        <p class="brand-subtitle">
-            FedAI Control Tower-governed export copilot: Voice deal quoting, CEPA tariff intelligence, live FX, and adversarial risk auditing.
-            <span class="badge-hitl" style="margin-left: 10px;">🛡️ FedAI Control Tower: Zero-finalize without Human Approval</span>
-        </p>
+    <div class="announcement-bar">
+        <span>ExportPilot · Trade Copilot</span>
+        <span>Built for Dubai Create AI Agents Championship</span>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# Sidebar: Live Feeds & Settings
-with st.sidebar:
-    st.markdown("### 🌐 Market & Corridor Desk")
-    live_fx = cached_fx("INR", "AED")
+# -----------------------------------------------------------------------------
+# 2. HERO SECTION (SERIF 64PX, MONO SUBTITLE, BLURRED GRADIENT WASH)
+# -----------------------------------------------------------------------------
+st.markdown(
+    """
+    <div class="hero-wrapper">
+        <div class="hero-wash"></div>
+        <div class="hero-content">
+            <div class="serif-hero">Export smarter.<br>Speak in your language.</div>
+            <div class="hero-subtitle">
+                India–UAE export trade deals quoted in seconds. Speak in Tamil, Hindi, or English — automated CEPA tariff intelligence, live INR/AED hedging, and FedAI Control Tower governance.
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Market Ticker Bar (Parchment Card)
+live_fx = cached_fx("INR", "AED")
+news_data = cached_news("UAE")
+
+col_tick1, col_tick2, col_tick3 = st.columns([1, 1, 1.2])
+with col_tick1:
     st.markdown(
         f"""
-        <div class="metric-box" style="margin-bottom: 1rem;">
-            <div class="metric-label">INR / AED Exchange Rate</div>
-            <div class="metric-val">1 INR = {live_fx['rate']:.4f} AED</div>
-            <div class="metric-sub">1 AED ≈ {1.0 / live_fx['rate']:.2f} INR</div>
-            <div style="margin-top: 0.5rem;">
-                <span class="badge-live">{'● Live Open Feed' if live_fx.get('is_live') else '● Offline Fallback Rate'}</span>
-            </div>
+        <div class="monad-card" style="padding: 20px 28px; margin-bottom: 2rem;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #797776; letter-spacing: 0.05em;">Live FX Rate (open.er-api.com)</div>
+            <div style="font-size: 20px; font-weight: 500; color: #242424; margin-top: 4px;">1 INR = {live_fx['rate']:.4f} AED</div>
+            <div style="font-size: 12px; color: #2b59d1; margin-top: 2px;">1 AED ≈ {1.0 / live_fx['rate']:.2f} INR</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with col_tick2:
+    st.markdown(
+        """
+        <div class="monad-card" style="padding: 20px 28px; margin-bottom: 2rem;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #797776; letter-spacing: 0.05em;">Corridor Status</div>
+            <div style="font-size: 20px; font-weight: 500; color: #242424; margin-top: 4px;">India–UAE CEPA Active</div>
+            <div style="font-size: 12px; color: #1b633e; margin-top: 2px;"><span class="pill-badge pill-low">0% Tariff Preference</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with col_tick3:
+    st.markdown(
+        """
+        <div class="monad-card" style="padding: 20px 28px; margin-bottom: 2rem;">
+            <div style="font-size: 11px; text-transform: uppercase; color: #797776; letter-spacing: 0.05em;">Governance Framework</div>
+            <div style="font-size: 20px; font-weight: 500; color: #242424; margin-top: 4px;">FedAI Control Tower</div>
+            <div style="font-size: 12px; color: #797776; margin-top: 2px;">Human Approval Gate Enforced</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("### 🇦🇪 Destination: UAE Trade Norms")
-    uae_norms = get_buyer_norms("UAE")
-    with st.expander("View UAE Business Norms", expanded=False):
-        st.markdown(f"**Working Week:**\n{uae_norms['working_week']}")
-        st.markdown(f"**Greeting Protocol:**\n{uae_norms['greeting_style']}")
-        st.markdown(f"**Payment Norms:**\n{uae_norms['payment_terms']}")
-        st.markdown(f"**Key Holidays & Ramadan:**\n{uae_norms['holidays']}")
-        st.markdown(f"**Incoterms & Ports:**\n{uae_norms['negotiation_notes']}")
-
-    st.markdown("---")
-    st.markdown("### ⚙️ Engine Status")
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
-    has_gemini = bool(gemini_key and not gemini_key.startswith("your_") and len(gemini_key) > 10)
-    if has_gemini:
-        st.success(f"Gemini Connected ({os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')})")
-    else:
-        st.info("Operating in Resilient Offline Fallback mode (No API Key Required)")
-
-    st.caption("Dubai Create AI Agents Championship | Cost: ₹0")
-
-
-# Workspace Navigation
-tab_quote, tab_risk_auditor, tab_docs, tab_freight, tab_tower, tab_history, tab_benchmarks = st.tabs([
-    "💬 Deal Copilot",
-    "🛡️ Risk Auditor",
-    "📄 Document Agent",
-    "🚢 Freight Estimator",
-    "🗼 FedAI Control Tower",
-    "📜 Deals Archive",
-    "🧪 Vernacular Test Bench",
+# -----------------------------------------------------------------------------
+# 3. TABS STYLED AS PILLS
+# -----------------------------------------------------------------------------
+tab_voice, tab_docs, tab_risk, tab_tower, tab_route = st.tabs([
+    "VOICE ASSISTANT",
+    "DOCUMENTS",
+    "RISK AUDITOR",
+    "AUDIT LOG",
+    "COST & ROUTE",
 ])
 
-# -------------------------------------------------------------
-# TAB 1: DEAL COPILOT WORKBENCH
-# -------------------------------------------------------------
-with tab_quote:
-    col_input, col_info = st.columns([1.2, 0.8], gap="large")
-
-    with col_input:
-        st.markdown("#### 1. Speak or Enter Your Deal Request")
-        st.caption("Accepts Tamil (தமிழ்), Hindi (हिन्दी), or English voice notes & text.")
-
-        # Safe Voice Input with Audio Hash Deduplication
-        try:
-            audio_val = st.audio_input("🎙️ Record Voice Request")
-            if audio_val is not None:
-                audio_bytes = audio_val.read()
-                audio_hash = hashlib.md5(audio_bytes).hexdigest()
-                # Process audio only if it has not been processed yet
-                if st.session_state.last_processed_audio_hash != audio_hash:
-                    with st.spinner("Processing speech via Gemini..."):
-                        v_res = transcribe_and_translate_audio(audio_bytes)
-                        st.session_state.last_processed_audio_hash = audio_hash
-                        if v_res and v_res.get("english"):
-                            st.session_state.voice_meta = v_res
-                            st.session_state.deal_query_input = v_res["english"]
-                            # Log to Control Tower
-                            audit_log_event(
-                                action="Multilingual Voice Ingestion",
-                                reason=f"Transcribed speech in [{v_res.get('language')}] -> English trade query",
-                                risk_level="Low",
-                                status="Transcribed",
-                            )
-                            st.rerun()
-                        else:
-                            st.warning("Speech not detected clearly. Please type your deal below.")
-        except Exception as mic_err:
-            st.warning("Mic unavailable. Please type your request below or check microphone permissions.")
-
-        st.markdown(
-            """
-            <p style="font-size: 0.78rem; color: #64748b; margin-top: -6px; margin-bottom: 12px;">
-                🔒 <em>Tip: If browser shows 'An error has occurred', click the lock icon left of <strong>localhost:8501</strong>, set <strong>Microphone → Allow</strong>, and reload. Or simply type your request in the box below.</em>
+# =============================================================================
+# TAB 1: VOICE ASSISTANT (TASK 1: REBUILT VOICE PIPELINE)
+# =============================================================================
+with tab_voice:
+    st.markdown(
+        """
+        <div class="monad-card">
+            <div class="serif-card-title">Multilingual Voice Deal Desk</div>
+            <p style="color: #797776; font-size: 14px; margin-bottom: 1.5rem;">
+                Record speech or upload audio in Tamil, Hindi, or English. Local faster-whisper converts speech to text, detects the language, and translates to international trade English.
             </p>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        # Show detected voice translation badge if available
-        if st.session_state.voice_meta:
-            vm = st.session_state.voice_meta
-            st.info(
-                f"**Detected Language:** `{vm['language'].upper()}` | **Original Voice:** *\"{vm['transcript']}\"*\n\n"
-                f"**Translated Request:** *\"{vm['english']}\"*"
+    col_v1, col_v2 = st.columns([1.1, 0.9], gap="large")
+
+    with col_v1:
+        st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px;\">Step 1: Audio Input & Settings</div>", unsafe_allow_html=True)
+
+        c_opt1, c_opt2 = st.columns(2)
+        with c_opt1:
+            lang_selector = st.selectbox(
+                "Language Selector",
+                ["Auto-detect", "English", "Hindi", "Tamil"],
+                help="Select native language or allow auto-detection.",
+            )
+        with c_opt2:
+            model_selector = st.selectbox(
+                "Whisper Model (Local)",
+                ["base", "small"],
+                index=0,
+                help="Base is fast and lightweight on CPU (~140MB). Small offers higher accuracy.",
             )
 
-        # Synchronized Text Area (bound to session_state)
-        query_text = st.text_area(
-            "Exporter Deal Request (English):",
-            key="deal_query_input",
-            height=90,
-            help="Type or edit the deal instructions here.",
+        # Dual Audio Input: Microphone or File Upload
+        input_mode = st.radio(
+            "Input Method",
+            ["🎙️ Microphone Recorder", "📁 Upload Voice Note (WAV, MP3, M4A, OGG, OPUS, WEBM)"],
+            horizontal=True,
         )
 
-        # Quick preset buttons (Instant execution without conflict)
-        st.markdown("<p style='font-size: 0.82rem; color: #475569; font-weight: 600; margin-bottom: 0.35rem;'>Or select quick sample scenario:</p>", unsafe_allow_html=True)
-        q_cols = st.columns(3)
-        with q_cols[0]:
-            if st.button("👕 500 Cotton Shirts (Dubai)", use_container_width=True):
-                st.session_state.deal_query_input = "Quote 500 cotton shirts to a Dubai buyer at 350 INR each, CIF Jebel Ali"
-                st.session_state.voice_meta = None
-                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
-                audit_log_event("Sample Scenario Loaded", "Loaded 500 Cotton Shirts (Dubai)", "Low", "Loaded")
-                st.rerun()
-        with q_cols[1]:
-            if st.button("🌶️ 1000 kg Cardamom (UAE)", use_container_width=True):
-                st.session_state.deal_query_input = "Quote 1000 kg Grade-A Cardamom to UAE buyer at 1800 INR per kg, 30% advance"
-                st.session_state.voice_meta = None
-                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
-                audit_log_event("Sample Scenario Loaded", "Loaded 1000 kg Cardamom (UAE)", "Low", "Loaded")
-                st.rerun()
-        with q_cols[2]:
-            if st.button("👜 300 Leather Bags (Abu Dhabi)", use_container_width=True):
-                st.session_state.deal_query_input = "Quote 300 genuine leather bags to Abu Dhabi distributor at 1200 INR each"
-                st.session_state.voice_meta = None
-                st.session_state.current_deal = run_trade_copilot(st.session_state.deal_query_input)
-                audit_log_event("Sample Scenario Loaded", "Loaded 300 Leather Bags (Abu Dhabi)", "Low", "Loaded")
-                st.rerun()
+        audio_bytes: Optional[bytes] = None
+        format_hint: Optional[str] = None
 
-        if st.button("⚡ Run ExportPilot Agent", type="primary", use_container_width=True):
-            if query_text.strip():
-                with st.spinner("ExportPilot Agent: Analyzing deal, calculating live FX, checking trade risks, and drafting quote..."):
-                    result = run_trade_copilot(query_text)
-                    st.session_state.current_deal = result
-                    st.session_state.approval_message = None
-                    audit_log_event(
-                        action="Deal Analysis & Quote Calculation",
-                        reason=f"Processed exporter query: {query_text[:60]}... Total AED: {result.get('quote_data', {}).get('total_target')}",
-                        risk_level="Medium",
-                        status="Pending Human Approval",
+        if "Microphone" in input_mode:
+            try:
+                mic_file = st.audio_input("Record Voice Deal Note")
+                if mic_file is not None:
+                    audio_bytes = mic_file.read()
+                    format_hint = "webm"
+            except Exception as e:
+                st.error(f"Microphone access error: {e}. Please ensure browser mic permission is allowed.")
+        else:
+            up_file = st.file_uploader(
+                "Upload voice note",
+                type=["wav", "mp3", "m4a", "ogg", "opus", "webm"],
+                help="Supports all major audio formats.",
+            )
+            if up_file is not None:
+                audio_bytes = up_file.read()
+                format_hint = up_file.name.split(".")[-1]
+
+        # Automatic Audio Processing upon New Recording/Upload
+        if audio_bytes is not None:
+            a_hash = hashlib.md5(audio_bytes).hexdigest()
+            if st.session_state.last_processed_audio_hash != a_hash:
+                with st.spinner("Processing audio with local faster-whisper (converting to 16 kHz mono)..."):
+                    res = transcribe_audio_pipeline(
+                        audio_bytes=audio_bytes,
+                        language_choice=lang_selector,
+                        model_size=model_selector,
+                        format_hint=format_hint,
                     )
-                    st.rerun()
-            else:
-                st.warning("Please enter or speak a deal request first.")
+                    st.session_state.last_processed_audio_hash = a_hash
 
-    with col_info:
-        st.markdown("#### 2. Trade & Regulatory Risk Intelligence")
-        news_data = cached_news("UAE")
+                    if res.get("success"):
+                        st.session_state.detected_voice_meta = res
+                        st.session_state.editable_transcript = res.get("transcript", "")
+                        st.session_state.deal_query_input = res.get("english", res.get("transcript", ""))
+                        audit_log_event(
+                            action="Voice Transcription",
+                            reason=f"Transcribed {res.get('duration_sec')}s audio in [{res.get('language_name')}] via faster-whisper {model_selector}",
+                            risk_level="Low",
+                            status="Transcribed",
+                        )
+                        st.rerun()
+                    else:
+                        st.error(f"⚠️ {res.get('error', 'Could not process audio')}")
+
+        # Step 2: Review & Edit Transcript
+        st.markdown("<hr style='margin: 1.5rem 0;'>", unsafe_allow_html=True)
+        st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px;\">Step 2: Review & Send to Agent</div>", unsafe_allow_html=True)
+
+        if st.session_state.detected_voice_meta:
+            vm = st.session_state.detected_voice_meta
+            st.markdown(
+                f"""
+                <div style="margin-bottom: 12px;">
+                    <span class="pill-badge pill-low">Detected: {vm.get('language_name')} ({vm.get('language')})</span>
+                    <span class="pill-badge" style="margin-left: 6px;">Duration: {vm.get('duration_sec')}s</span>
+                    <span class="pill-badge" style="margin-left: 6px;">Size: {vm.get('byte_size'):,} Bytes</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Editable Transcript Box
+        st.session_state.editable_transcript = st.text_area(
+            "Native Transcript (Editable):",
+            value=st.session_state.editable_transcript,
+            height=70,
+            help="You can manually correct the transcript here before submitting.",
+        )
+
+        # Translated English Deal Query (Sent to Agent)
+        st.session_state.deal_query_input = st.text_area(
+            "English Deal Instructions (Sent to Agent):",
+            value=st.session_state.deal_query_input,
+            height=90,
+            help="The agent uses this English deal specification to calculate pricing, verify customs, and draft buyer emails.",
+        )
+
+        col_act1, col_act2 = st.columns([1.5, 1])
+        with col_act1:
+            if st.button("SEND TO AGENT ▸", type="primary", use_container_width=True):
+                if st.session_state.deal_query_input.strip():
+                    with st.spinner("ExportPilot Agent: Calculating FX, verifying CEPA protocols, and drafting quote..."):
+                        deal_result = run_trade_copilot(st.session_state.deal_query_input)
+                        st.session_state.current_deal = deal_result
+                        st.session_state.approval_message = None
+                        audit_log_event(
+                            action="Deal Quotation Drafted",
+                            reason=f"Calculated quote for query: {st.session_state.deal_query_input[:60]}...",
+                            risk_level="Medium",
+                            status="Pending Human Approval",
+                        )
+                        st.rerun()
+                else:
+                    st.warning("Please record voice or enter deal instructions first.")
+
+        with col_act2:
+            if st.button("RESET INPUT", use_container_width=True):
+                st.session_state.deal_query_input = ""
+                st.session_state.editable_transcript = ""
+                st.session_state.detected_voice_meta = None
+                st.session_state.current_deal = None
+                st.rerun()
+
+    with col_v2:
+        # Voice Test & Self-Check Expander
+        with st.expander("🔬 VOICE TEST & SELF-CHECK", expanded=True):
+            st.markdown(
+                """
+                <p style="font-size: 13px; color: #4e4d4d; margin-bottom: 12px;">
+                    Test sentences to verify pronunciation, language detection, and audio fidelity:
+                </p>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            test_cases = [
+                ("EN", "I want to export 500 kilograms of turmeric to Dubai.", "English"),
+                ("HI", "मुझे दुबई में हल्दी भेजनी है, कौन से दस्तावेज़ चाहिए?", "Hindi"),
+                ("TA", "நான் துபாய்க்கு மஞ்சள் ஏற்றுமதி செய்ய வேண்டும்", "Tamil"),
+            ]
+
+            for code, sentence, lang_label in test_cases:
+                st.markdown(f"**{lang_label} ({code}):**")
+                st.code(sentence, language="text")
+                if st.button(f"LOAD {code} SAMPLE ▸", key=f"btn_sample_{code}"):
+                    st.session_state.deal_query_input = sentence
+                    st.session_state.editable_transcript = sentence
+                    st.session_state.detected_voice_meta = {
+                        "language": code.lower(),
+                        "language_name": lang_label,
+                        "duration_sec": 3.2,
+                        "byte_size": 102400,
+                        "transcript": sentence,
+                        "english": sentence if code == "EN" else "I want to export turmeric to Dubai.",
+                    }
+                    st.rerun()
+
+        # UAE Buyer Protocol Overview Card
+        uae_norms = get_buyer_norms("UAE")
         st.markdown(
             f"""
-            <div class="metric-box" style="margin-bottom: 1rem;">
-                <div class="metric-label">India–UAE CEPA Bilateral Corridor</div>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
-                    <span class="badge-risk-low">🛡️ Overall Risk: Low</span>
-                    <span style="font-size: 0.8rem; color: #475569;">Source: {news_data.get('source', 'DGFT Desk')}</span>
+            <div class="monad-card" style="padding: 30px; margin-top: 1.5rem;">
+                <div class="serif-card-title" style="font-size: 20px;">Destination: UAE Buyer Norms</div>
+                <div style="font-size: 13px; color: #4e4d4d; line-height: 1.6; margin-top: 10px;">
+                    <strong>Working Week:</strong> {uae_norms['working_week']}<br>
+                    <strong>Payment Norms:</strong> {uae_norms['payment_terms']}<br>
+                    <strong>Port Protocols:</strong> {uae_norms['negotiation_notes']}
                 </div>
-                <ul style="font-size: 0.84rem; margin-top: 0.75rem; padding-left: 1.2rem; color: #1e293b; line-height: 1.5;">
-                    <li><strong>CEPA Duty Access:</strong> Zero or concessional tariffs on 90%+ Indian goods.</li>
-                    <li><strong>Maritime Logistics:</strong> Western Indian ports (Nhava Sheva/Mundra) to Jebel Ali operating on regular 3–5 day direct sailing.</li>
-                    <li><strong>Currency Peg:</strong> USD/AED pegged at 3.6725 ensuring predictable cross-rates.</li>
-                </ul>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
-        with st.expander("Recent Trade & Logistics Bulletins", expanded=False):
-            for art in news_data.get("articles", []):
-                st.markdown(f"**{art['title']}**")
-                st.caption(f"Source: {art['source']} | Impact: {art['risk_impact']}")
-                st.write(art["summary"])
-                st.markdown("---")
 
     # Agent Result Display & Human Approval Section
     if st.session_state.current_deal:
         deal = st.session_state.current_deal
         q_data = deal.get("quote_data", {})
 
-        st.markdown("---")
-        st.markdown("### 3. Agent Review & Human Approval Gate")
-        st.caption("Examine the generated quotation breakdown and buyer draft. The deal is **NOT saved** until you click 'Approve & Save Deal to Archive'.")
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown("<div class=\"serif-section\">Agent Quotation & Human Approval</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<p style='color: #797776; font-size: 14px;'>Under the FedAI Control Tower governance mandate, this deal is in <code>DRAFT</code> status until you explicitly click Approve.</p>",
+            unsafe_allow_html=True,
+        )
 
-        col_q, col_draft = st.columns([1, 1.2], gap="large")
+        col_res1, col_res2 = st.columns([1, 1], gap="large")
 
-        with col_q:
-            st.markdown("<div class=\"section-label\">📊 Structured Quotation Breakdown</div>", unsafe_allow_html=True)
+        with col_res1:
             st.markdown(
                 f"""
-                <div class="quote-sheet">
-                    <table>
-                        <tr>
-                            <td class="quote-label">Product Description</td>
-                            <td class="quote-val">{q_data.get('item', 'Goods')}</td>
+                <div class="monad-card">
+                    <div class="serif-card-title">Commercial Quotation Breakdown</div>
+                    <table style="margin-top: 1rem;">
+                        <tr><td>Item Description</td><td style="text-align: right; font-weight: 500;">{q_data.get('item')}</td></tr>
+                        <tr><td>Quantity</td><td style="text-align: right; font-weight: 500;">{q_data.get('quantity', 0):,.0f} Units</td></tr>
+                        <tr><td>Unit Price (INR)</td><td style="text-align: right; font-weight: 500;">₹{q_data.get('unit_price_inr', 0):,.2f}</td></tr>
+                        <tr><td>Total FOB Value (INR)</td><td style="text-align: right; font-weight: 500;">₹{q_data.get('total_inr', 0):,.2f}</td></tr>
+                        <tr><td>FX Rate Applied</td><td style="text-align: right; font-weight: 500;">1 INR = {q_data.get('fx_rate', 0):.4f} AED</td></tr>
+                        <tr style="border-top: 2px solid #cecac8;">
+                            <td style="font-weight: 500; font-size: 15px;">Unit Price (AED)</td>
+                            <td style="text-align: right; font-size: 16px; font-weight: 500; color: #2b59d1;">AED {q_data.get('unit_price_target', 0):,.2f}</td>
                         </tr>
-                        <tr>
-                            <td class="quote-label">Quantity Units</td>
-                            <td class="quote-val">{q_data.get('quantity', 0):,.0f}</td>
-                        </tr>
-                        <tr>
-                            <td class="quote-label">Unit Price (INR)</td>
-                            <td class="quote-val">₹{q_data.get('unit_price_inr', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td class="quote-label">Total Value (INR)</td>
-                            <td class="quote-val">₹{q_data.get('total_inr', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td class="quote-label">Applied FX Rate</td>
-                            <td class="quote-val">1 INR = {q_data.get('fx_rate', 0):.4f} AED</td>
-                        </tr>
-                        <tr style="background: #f8fafc; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
-                            <td class="quote-label" style="font-weight: 700 !important; color: #0f172a !important;">Unit Price (AED)</td>
-                            <td class="quote-val-accent">AED {q_data.get('unit_price_target', 0):,.2f}</td>
-                        </tr>
-                        <tr style="background: #f1f5f9;">
-                            <td class="quote-label" style="font-weight: 800 !important; color: #0f172a !important; font-size: 1rem !important;">Total Quote (CIF Dubai)</td>
-                            <td class="quote-val-total">AED {q_data.get('total_target', 0):,.2f}</td>
+                        <tr style="background: #e9e6e3;">
+                            <td style="font-weight: 500; font-size: 16px;">Total Quote (CIF Jebel Ali)</td>
+                            <td style="text-align: right; font-size: 18px; font-weight: 500; color: #242424;">AED {q_data.get('total_target', 0):,.2f}</td>
                         </tr>
                     </table>
                 </div>
@@ -575,41 +402,45 @@ with tab_quote:
                 unsafe_allow_html=True,
             )
 
-            # Estimated FX Margin Buffer Panel (with explicit formula)
+            # Highlight Card (Periwinkle Mist #cfdaf5)
             est_buffer = q_data.get("estimated_fx_buffer", 0.0)
             st.markdown(
                 f"""
-                <div class="metric-box" style="margin-top: 1rem; border-left: 4px solid #10b981;">
-                    <div class="metric-label">Estimated FX Volatility Buffer Protected</div>
-                    <div class="metric-val" style="color: #065f46 !important;">AED {est_buffer:,.2f}</div>
-                    <div style="font-size: 0.8rem; color: #334155; margin-top: 0.35rem;">
-                        <strong>Transparent Formula:</strong> <code>{q_data.get('buffer_formula')}</code>
-                    </div>
-                    <div style="font-size: 0.78rem; color: #64748b; margin-top: 0.25rem;">
-                        Protects MSME margin against 2.5% inter-bank settlement fluctuation during shipping and payment cycle.
+                <div class="monad-card-highlight">
+                    <div style="font-size: 11px; text-transform: uppercase; color: #2b59d1; font-weight: 500; letter-spacing: 0.05em;">Estimated FX Margin Buffer Protected</div>
+                    <div style="font-size: 26px; font-weight: 500; color: #242424; margin-top: 4px;">AED {est_buffer:,.2f}</div>
+                    <div style="font-size: 12px; color: #4e4d4d; margin-top: 6px;">
+                        Formula: <code>{q_data.get('buffer_formula')}</code>
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-        with col_draft:
-            st.markdown("<div class=\"section-label\">✉️ Drafted English Buyer Email</div>", unsafe_allow_html=True)
-            draft_text = st.text_area(
-                "Review or edit before human approval:",
-                value=deal.get("buyer_message", ""),
-                height=300,
+        with col_res2:
+            st.markdown(
+                """
+                <div class="monad-card">
+                    <div class="serif-card-title">Drafted English Buyer Message</div>
+                    <p style="color: #797776; font-size: 12px; margin-bottom: 12px;">Culturally calibrated for UAE commercial negotiation protocols.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            # Human Approval Gate Button (HARD RULE)
-            st.markdown("#### 🛡️ Explicit Human-in-the-Loop Gate")
-            btn_col1, btn_col2 = st.columns([1.5, 1])
+            edited_buyer_msg = st.text_area(
+                "Buyer Email Body:",
+                value=deal.get("buyer_message", ""),
+                height=260,
+            )
 
-            with btn_col1:
-                if st.button("✅ Approve & Save Deal to Archive", type="primary", use_container_width=True):
-                    deal_record = {
-                        "exporter_query": deal.get("query", "Voice/Text Quote"),
-                        "item": q_data.get("item", "Custom Goods"),
+            st.markdown("<div style='margin-top: 1.5rem;'>", unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("APPROVE & SAVE DEAL ▸", type="primary", use_container_width=True):
+                    record = {
+                        "exporter_query": st.session_state.deal_query_input,
+                        "item": q_data.get("item", "Goods"),
                         "quantity": q_data.get("quantity", 0),
                         "unit_price_inr": q_data.get("unit_price_inr", 0),
                         "total_inr": q_data.get("total_inr", 0),
@@ -617,305 +448,277 @@ with tab_quote:
                         "currency": q_data.get("target_currency", "AED"),
                         "fx_rate": q_data.get("fx_rate", 0.0435),
                         "risk_level": deal.get("risk_level", "Low"),
-                        "buyer_message": draft_text,
+                        "buyer_message": edited_buyer_msg,
                         "status": "approved",
                     }
-                    new_id = save_deal(deal_record)
+                    new_id = save_deal(record)
                     audit_log_event(
                         action="Deal Approved & Archived",
-                        reason=f"User approved deal #{new_id} ({q_data.get('item')}, Total: AED {q_data.get('total_target')})",
+                        reason=f"Human approved deal #{new_id} ({q_data.get('item')}, Total: AED {q_data.get('total_target')})",
                         risk_level="Low",
                         status="Human Approved",
                         deal_id=new_id,
                     )
-                    st.session_state.approval_message = f"Deal #{new_id} successfully approved and saved to database! Check 'Deals Archive' tab."
-                    st.success(st.session_state.approval_message)
-
-            with btn_col2:
-                if st.button("❌ Discard Draft", use_container_width=True):
+                    st.success(f"Deal #{new_id} approved and stored in SQLite database!")
+            with col_b2:
+                if st.button("DISCARD DRAFT", use_container_width=True):
                     st.session_state.current_deal = None
-                    st.session_state.approval_message = "Quotation draft discarded. Nothing was saved."
-                    audit_log_event(
-                        action="Deal Discarded",
-                        reason="User rejected quotation draft; zero changes committed",
-                        risk_level="Low",
-                        status="Discarded",
-                    )
+                    audit_log_event("Deal Discarded", "User discarded quotation draft", "Low", "Discarded")
                     st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            if st.session_state.approval_message:
-                st.caption(f"Status: {st.session_state.approval_message}")
-
-
-# -------------------------------------------------------------
-# TAB 2: ADVERSARIAL RISK AUDITOR
-# -------------------------------------------------------------
-with tab_risk_auditor:
-    st.markdown("#### 🛡️ Adversarial Risk Auditor")
-    st.caption("Argues aggressively why an Indian exporter should NOT accept hazardous deal terms, protecting you against payment default.")
-
-    col_r1, col_r2 = st.columns([1.2, 0.8], gap="large")
-
-    with col_r1:
-        risk_input = st.text_area(
-            "Enter deal proposal to audit for risk:",
-            value="The buyer wants 100% payment after delivery and is a new customer ordering 2000 units.",
-            height=80,
-        )
-
-        c_presets = st.columns(2)
-        with c_presets[0]:
-            if st.button("⚠️ Test Bad Deal (100% Post-Delivery)", use_container_width=True):
-                risk_input = "Buyer wants 100% payment after delivery at Dubai port for a new customer."
-        with c_presets[1]:
-            if st.button("✅ Test Safe Deal (50% LC Advance)", use_container_width=True):
-                risk_input = "Buyer pays 50% advance via Letter of Credit and has ordered 3 times before."
-
-        if st.button("🔍 Run Adversarial Risk Audit", type="primary", use_container_width=True):
-            audit_res = audit_risk_assessment(risk_input)
-            st.session_state["last_audit_res"] = audit_res
-
-    with col_r2:
-        if "last_audit_res" in st.session_state:
-            res = st.session_state["last_audit_res"]
-            lvl = res["risk_level"]
-            badge_class = "badge-risk-high" if lvl == "High" else ("badge-risk-med" if lvl == "Medium" else "badge-risk-low")
-
-            st.markdown(
-                f"""
-                <div class="metric-box" style="margin-top: 0.5rem; border-left: 4px solid {'#ef4444' if lvl=='High' else '#10b981'};">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="metric-label">Auditor Verdict</span>
-                        <span class="{badge_class}">Risk Level: {lvl.upper()}</span>
-                    </div>
-                    <div style="font-size: 1.1rem; font-weight: 800; color: {'#991b1b' if lvl=='High' else '#166534'}; margin-top: 0.35rem;">
-                        {res['recommendation']}
-                    </div>
-                    <ul style="font-size: 0.85rem; color: #1e293b; margin-top: 0.75rem; padding-left: 1.2rem; line-height: 1.5;">
-                        {''.join(f'<li>{r}</li>' for r in res['reasons'])}
-                    </ul>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Click 'Run Adversarial Risk Audit' to inspect the risk evaluation.")
-
-
-# -------------------------------------------------------------
-# TAB 3: EXPORT DOCUMENT AGENT
-# -------------------------------------------------------------
+# =============================================================================
+# TAB 2: DOCUMENTS (EXPORT PACKING LIST & CEPA CHECKLIST)
+# =============================================================================
 with tab_docs:
-    st.markdown("#### 📄 Export Document Agent (Packing List & Compliance)")
-    st.caption("Instantly compiles export packing lists, carton estimates, and UAE CEPA customs clearance checklists.")
-
-    doc_c1, doc_c2 = st.columns([1, 1], gap="large")
-
-    with doc_c1:
-        doc_item = st.text_input("Item Description", value="100% Combed Cotton T-Shirts")
-        doc_qty = st.number_input("Quantity Units", min_value=1.0, value=500.0, step=50.0)
-        doc_price = st.number_input("Unit Price (INR)", min_value=1.0, value=350.0, step=10.0)
-
-        if st.button("📑 Generate Packing List & CEPA Checklist", type="primary", use_container_width=True):
-            docs = generate_packing_list_and_compliance(doc_item, doc_qty, doc_price)
-            st.session_state["generated_docs"] = docs
-
-    with doc_c2:
-        if "generated_docs" in st.session_state:
-            d_out = st.session_state["generated_docs"]
-            pkl = d_out["packing_list"]
-
-            st.markdown("##### 📦 Export Packing Specification")
-            st.markdown(
-                f"""
-                <div class="quote-sheet" style="font-size: 0.88rem;">
-                    <strong>Item:</strong> {pkl['item']} (HS Code: <code>{pkl['hs_code']}</code>)<br>
-                    <strong>Total Packages:</strong> {pkl['total_packages']} ({pkl['package_type']})<br>
-                    <strong>Net Weight:</strong> {pkl['net_weight']} | <strong>Gross Weight:</strong> {pkl['gross_weight']}<br>
-                    <strong>Carton Dimensions:</strong> {pkl['dimensions']}<br>
-                    <strong>Shipping Marks:</strong> <code>{pkl['marks_and_numbers']}</code>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("##### 🇦🇪 UAE CEPA Import Compliance Checklist")
-            df_comp = pd.DataFrame(d_out["compliance_checklist"])
-            st.dataframe(df_comp, use_container_width=True)
-        else:
-            st.info("Click 'Generate Packing List' to compile shipment documents.")
-
-
-# -------------------------------------------------------------
-# TAB 4: FREIGHT & ROUTE ESTIMATOR
-# -------------------------------------------------------------
-with tab_freight:
-    st.markdown("#### 🚢 India–UAE Corridor Freight & Route Estimator")
-    st.caption("Benchmark direct transit times and container/air freight rates between key Indian export hubs and Dubai.")
-
-    f_col1, f_col2 = st.columns([1, 1], gap="large")
-
-    with f_col1:
-        origin_hub = st.selectbox(
-            "Select Indian Origin Port / Hub:",
-            ["Nhava Sheva / JNPT (Mumbai)", "Chennai Port (Tamil Nadu)", "Mundra Port (Gujarat)", "Cochin Port (Kerala)", "IGI Cargo Hub (Delhi - Air)"],
-        )
-        dest_hub = "Jebel Ali Port / DXB (Dubai, UAE)"
-        cargo_wt = st.number_input("Estimated Cargo Weight (KG):", min_value=10.0, value=500.0, step=50.0)
-
-        if st.button("📊 Calculate Freight & Route Options", type="primary", use_container_width=True):
-            f_res = estimate_corridor_freight(origin_hub, dest_hub, cargo_wt)
-            st.session_state["freight_estimate"] = f_res
-
-    with f_col2:
-        if "freight_estimate" in st.session_state:
-            fe = st.session_state["freight_estimate"]
-            sea = fe["sea_freight"]
-            air = fe["air_freight"]
-
-            st.markdown(
-                f"""
-                <div class="metric-box" style="margin-bottom: 1rem; border-left: 4px solid #0284c7;">
-                    <div class="metric-label">{sea['mode']}</div>
-                    <div class="metric-val" style="color: #0284c7;">{sea['cost_aed']} <span style="font-size: 0.9rem; font-weight: normal; color: #475569;">({sea['cost_inr']})</span></div>
-                    <div style="font-size: 0.85rem; color: #1e293b; margin-top: 0.35rem;">
-                        ⏱️ <strong>Transit Time:</strong> {sea['transit_time']}<br>
-                        💡 <strong>Best for:</strong> {sea['recommended_for']}
-                    </div>
-                </div>
-
-                <div class="metric-box" style="border-left: 4px solid #f59e0b;">
-                    <div class="metric-label">{air['mode']}</div>
-                    <div class="metric-val" style="color: #b45309;">{air['cost_aed']} <span style="font-size: 0.9rem; font-weight: normal; color: #475569;">({air['cost_inr']})</span></div>
-                    <div style="font-size: 0.85rem; color: #1e293b; margin-top: 0.35rem;">
-                        ⏱️ <strong>Transit Time:</strong> {air['transit_time']}<br>
-                        💡 <strong>Best for:</strong> {air['recommended_for']}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Select an origin hub and click 'Calculate Freight' to view shipping routes.")
-
-
-# -------------------------------------------------------------
-# TAB 5: FedAI CONTROL TOWER & AUDIT LOG
-# -------------------------------------------------------------
-with tab_tower:
-    st.markdown("#### 🗼 FedAI Control Tower (UAE Federal AI Governance Layer)")
-    st.caption("Air traffic control for autonomous trade agents: Immutable log of every action, rationale, risk classification, and approval state.")
-
     st.markdown(
         """
-        <div style="background: #0f172a; color: #f8fafc; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.88rem;">
-            <strong>UAE FedAI Standard Alignment:</strong> All agent decisions are tracked with auditable rationales. High and medium-risk decisions require explicit human authorization before execution.
+        <div class="monad-card">
+            <div class="serif-card-title">Export Document Agent</div>
+            <p style="color: #797776; font-size: 14px;">
+                Compile export packing lists, carton specifications, and mandatory UAE CEPA customs clearance checklists.
+            </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    logs = get_audit_logs(limit=100)
-    if logs:
-        df_logs = pd.DataFrame(logs)
-        st.dataframe(df_logs, use_container_width=True)
+    doc_c1, doc_c2 = st.columns([1, 1], gap="large")
+    with doc_c1:
+        st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px;\">Consignment Specifications</div>", unsafe_allow_html=True)
+        doc_item = st.text_input("Product Name / Description", value="100% Combed Cotton T-Shirts")
+        doc_qty = st.number_input("Consignment Quantity (Units / Pieces)", min_value=1.0, value=500.0, step=50.0)
+        doc_price = st.number_input("Unit Price in INR", min_value=1.0, value=350.0, step=10.0)
 
+        if st.button("GENERATE SHIPMENT PAPERS ▸", type="primary", use_container_width=True):
+            st.session_state["doc_output"] = generate_packing_list_and_compliance(doc_item, doc_qty, doc_price)
+
+    with doc_c2:
+        if "doc_output" in st.session_state:
+            d_out = st.session_state["doc_output"]
+            pkl = d_out["packing_list"]
+
+            st.markdown(
+                f"""
+                <div class="monad-card" style="padding: 30px;">
+                    <div class="serif-card-title" style="font-size: 20px;">Packing Specification</div>
+                    <table style="margin-top: 12px;">
+                        <tr><td>Item</td><td>{pkl['item']} (HS Code: <code>{pkl['hs_code']}</code>)</td></tr>
+                        <tr><td>Packages</td><td>{pkl['total_packages']}</td></tr>
+                        <tr><td>Packaging Type</td><td>{pkl['package_type']}</td></tr>
+                        <tr><td>Weight</td><td>Net: {pkl['net_weight']} | Gross: {pkl['gross_weight']}</td></tr>
+                        <tr><td>Carton Dimensions</td><td>{pkl['dimensions']}</td></tr>
+                        <tr><td>Shipping Marks</td><td><code>{pkl['marks_and_numbers']}</code></td></tr>
+                    </table>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px; margin-top: 1.5rem;\">UAE CEPA Import Compliance Checklist</div>", unsafe_allow_html=True)
+            df_comp = pd.DataFrame(d_out["compliance_checklist"])
+            st.dataframe(df_comp, use_container_width=True)
+        else:
+            st.info("Enter consignment details and click 'Generate Shipment Papers' to produce packing and compliance documents.")
+
+# =============================================================================
+# TAB 3: RISK AUDITOR ("REASONS NOT TO ACCEPT THIS DEAL")
+# =============================================================================
+with tab_risk_auditor:
+    st.markdown(
+        """
+        <div class="monad-card">
+            <div class="serif-card-title">Adversarial Risk Auditor</div>
+            <p style="color: #797776; font-size: 14px;">
+                Adversarial scrutiny of trade offers. Identifies payment default hazards, uncollateralized credit terms, and tells you why you should NOT accept risky deals.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    r_col1, r_col2 = st.columns([1, 1], gap="large")
+
+    with r_col1:
+        st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px;\">Audit Deal Terms</div>", unsafe_allow_html=True)
+        deal_terms_input = st.text_area(
+            "Enter deal proposal to audit:",
+            value="The buyer wants 100% payment after delivery and is a new customer ordering 2000 units.",
+            height=100,
+        )
+
+        st.markdown("<p style='font-size: 12px; color: #797776; text-transform: uppercase;'>Quick Test Proposals:</p>", unsafe_allow_html=True)
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            if st.button("⚠️ TEST 100% AFTER DELIVERY", use_container_width=True):
+                deal_terms_input = "The buyer wants 100% payment after delivery at Dubai port for a new customer."
+        with t_col2:
+            if st.button("✅ TEST 50% LC ADVANCE", use_container_width=True):
+                deal_terms_input = "The buyer pays 50% advance via Letter of Credit and has ordered 3 times before."
+
+        if st.button("AUDIT DEAL RISK ▸", type="primary", use_container_width=True):
+            st.session_state["auditor_verdict"] = audit_risk_assessment(deal_terms_input)
+
+    with r_col2:
+        if "auditor_verdict" in st.session_state:
+            v = st.session_state["auditor_verdict"]
+            lvl = v["risk_level"]
+            pill_class = "pill-high" if lvl == "High" else ("pill-med" if lvl == "Medium" else "pill-low")
+
+            st.markdown(
+                f"""
+                <div class="monad-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="serif-card-title" style="margin: 0;">Risk Auditor Verdict</div>
+                        <span class="pill-badge {pill_class}">Risk: {lvl.upper()}</span>
+                    </div>
+                    <div style="font-size: 18px; color: {'#991b1b' if lvl=='High' else '#1b633e'}; margin-top: 10px; font-weight: 500;">
+                        {v['recommendation']}
+                    </div>
+                    <div style="margin-top: 1.5rem;">
+                        <div style="font-size: 13px; text-transform: uppercase; color: #797776; margin-bottom: 8px;">Reasons NOT to Accept This Deal:</div>
+                        <ul style="font-size: 14px; color: #242424; line-height: 1.6; padding-left: 1.2rem;">
+                            {''.join(f'<li>{r}</li>' for r in v['reasons'])}
+                        </ul>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Click 'Audit Deal Risk' to view the adversarial analysis.")
+
+# =============================================================================
+# TAB 4: AUDIT LOG (FedAI CONTROL TOWER)
+# =============================================================================
+with tab_tower:
+    st.markdown(
+        """
+        <div class="monad-card">
+            <div class="serif-card-title">FedAI Control Tower & Audit Log</div>
+            <p style="color: #797776; font-size: 14px;">
+                UAE Federal AI Governance Layer. Every agent decision, rationale, and risk tier is logged immutably. High-risk decisions require explicit human authorization before execution.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    logs = get_audit_logs(limit=50)
+    if logs:
+        # Display as custom Monad table
+        st.markdown(
+            """
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp (UTC)</th>
+                        <th>Action</th>
+                        <th>Governance Rationale</th>
+                        <th>Risk Tier</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        for log_entry in logs:
+            r_lvl = log_entry.get("risk_level", "Low")
+            pill_c = "pill-high" if r_lvl == "High" else ("pill-med" if r_lvl == "Medium" else "pill-low")
+            st.markdown(
+                f"""
+                <tr>
+                    <td style="white-space: nowrap; font-size: 12px;">{log_entry.get('timestamp')[:19]}</td>
+                    <td style="font-weight: 500;">{log_entry.get('action')}</td>
+                    <td style="color: #4e4d4d;">{log_entry.get('reason')}</td>
+                    <td><span class="pill-badge {pill_c}">{r_lvl}</span></td>
+                    <td style="font-size: 12px;">{log_entry.get('governance_status')}</td>
+                </tr>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("</tbody></table>", unsafe_allow_html=True)
+
+        df_logs = pd.DataFrame(logs)
         csv_logs = io.StringIO()
         df_logs.to_csv(csv_logs, index=False)
+        st.markdown("<div style='margin-top: 1.5rem;'>", unsafe_allow_html=True)
         st.download_button(
-            "📥 Download Control Tower Audit Logs (CSV)",
+            "DOWNLOAD AUDIT LOG CSV ▸",
             data=csv_logs.getvalue(),
-            file_name=f"fedai_control_tower_logs_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv",
+            file_name=f"control_tower_audit_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv",
             mime="text/csv",
         )
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("No audit entries yet. Actions taken across the copilot will automatically populate this log.")
+        st.info("No audit events recorded yet. Agent actions will appear here in real time.")
 
+# =============================================================================
+# TAB 5: COST & ROUTE (CORRIDOR FREIGHT ESTIMATOR)
+# =============================================================================
+with tab_route:
+    st.markdown(
+        """
+        <div class="monad-card">
+            <div class="serif-card-title">Corridor Freight & Transit Estimator</div>
+            <p style="color: #797776; font-size: 14px;">
+                Direct benchmarks for maritime container corridors and air freight lanes between Indian hubs and Dubai/Jebel Ali.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# -------------------------------------------------------------
-# TAB 6: DEALS ARCHIVE
-# -------------------------------------------------------------
-with tab_history:
-    st.markdown("#### 📜 Archive of Approved Deals")
-    st.caption("Every record in this database underwent mandatory explicit human approval before persistence.")
+    col_f1, col_f2 = st.columns([1, 1], gap="large")
 
-    deals = get_deals()
-    if deals:
-        df_deals = pd.DataFrame(deals)
-        display_cols = [
-            "id",
-            "created_at",
-            "item",
-            "quantity",
-            "unit_price_inr",
-            "total_inr",
-            "total_target",
-            "currency",
-            "fx_rate",
-            "risk_level",
-            "status",
-        ]
-        available_cols = [c for c in display_cols if c in df_deals.columns]
-        st.dataframe(df_deals[available_cols], use_container_width=True)
-
-        csv_buffer = io.StringIO()
-        df_deals.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="📥 Export Deals CSV",
-            data=csv_buffer.getvalue(),
-            file_name=f"exportpilot_deals_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv",
-            mime="text/csv",
+    with col_f1:
+        st.markdown("<div class=\"serif-card-title\" style=\"font-size: 20px;\">Route Parameters</div>", unsafe_allow_html=True)
+        origin_hub = st.selectbox(
+            "Origin Hub (India)",
+            [
+                "Nhava Sheva / JNPT (Mumbai)",
+                "Chennai Port (Tamil Nadu)",
+                "Mundra Port (Gujarat)",
+                "Cochin Port (Kerala)",
+                "IGI Cargo Terminal (Delhi - Air)",
+            ],
         )
+        dest_hub = "Jebel Ali Port / DXB (Dubai, UAE)"
+        cargo_weight = st.number_input("Consignment Weight (KG)", min_value=10.0, value=500.0, step=50.0)
 
-        st.markdown("---")
-        st.markdown("##### 🔍 Inspection of Selected Deal Record")
-        deal_ids = [d["id"] for d in deals]
-        selected_id = st.selectbox("Select Deal ID to inspect complete audit trail:", deal_ids)
-        selected_rec = next((d for d in deals if d["id"] == selected_id), None)
-        if selected_rec:
-            st.markdown(f"**Original Exporter Query:** *\"{selected_rec['exporter_query']}\"*")
-            st.markdown(f"**Approved Timestamp:** `{selected_rec['created_at']}` | **Status:** `{selected_rec['status'].upper()}`")
-            with st.expander("View Saved Buyer Message Draft", expanded=True):
-                st.text(selected_rec["buyer_message"])
-    else:
-        st.info("No approved deals saved yet. Use the 'Deal Copilot' tab to generate and approve your first deal.")
+        if st.button("CALCULATE ROUTE BENCHMARKS ▸", type="primary", use_container_width=True):
+            st.session_state["route_result"] = estimate_corridor_freight(origin_hub, dest_hub, cargo_weight)
 
+    with col_f2:
+        if "route_result" in st.session_state:
+            rr = st.session_state["route_result"]
+            sea = rr["sea_freight"]
+            air = rr["air_freight"]
 
-# -------------------------------------------------------------
-# TAB 7: VERNACULAR BENCHMARKS
-# -------------------------------------------------------------
-with tab_benchmarks:
-    st.markdown("#### 🧪 Vernacular Multi-Language Test Bench (Tamil, Hindi, English)")
-    st.caption("Demonstrating ExportPilot's multilingual audio and text capability across 30 curated trade queries.")
+            st.markdown(
+                f"""
+                <div class="monad-card" style="padding: 30px; margin-bottom: 1.5rem;">
+                    <div style="font-size: 11px; text-transform: uppercase; color: #2b59d1; letter-spacing: 0.05em;">{sea['mode']}</div>
+                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{sea['cost_aed']} <span style="font-size: 14px; color: #797776;">({sea['cost_inr']})</span></div>
+                    <div style="font-size: 13px; color: #4e4d4d; margin-top: 8px;">
+                        ⏱️ <strong>Transit Window:</strong> {sea['transit_time']}<br>
+                        💡 <strong>Application:</strong> {sea['recommended_for']}
+                    </div>
+                </div>
 
-    bench_lang = st.radio("Select Test Language:", ["Tamil (தமிழ்)", "Hindi (हिन्दी)", "English"], horizontal=True)
-    lang_key = "ta" if "Tamil" in bench_lang else ("hi" if "Hindi" in bench_lang else "en")
-
-    samples = SAMPLE_VERNACULAR_QUERIES.get(lang_key, [])
-    st.markdown(f"**Showing 10 Curated {bench_lang} Trade Scenarios:**")
-
-    for idx, item in enumerate(samples, 1):
-        with st.container():
-            c1, c2, c3 = st.columns([1.2, 1.2, 0.6])
-            with c1:
-                st.markdown(f"**#{idx}. Spoken Text:**\n`{item['transcript']}`")
-            with c2:
-                st.markdown(f"**English Translation:**\n*{item['english']}*")
-            with c3:
-                if st.button(f"Load #{idx}", key=f"btn_bench_{lang_key}_{idx}"):
-                    st.session_state.deal_query_input = item["english"]
-                    st.session_state.voice_meta = {
-                        "language": lang_key,
-                        "transcript": item["transcript"],
-                        "english": item["english"],
-                    }
-                    st.session_state.current_deal = run_trade_copilot(item["english"])
-                    audit_log_event(
-                        action="Vernacular Benchmark Scenario Loaded",
-                        reason=f"Loaded [{lang_key}] scenario #{idx}: '{item['transcript'][:40]}...'",
-                        risk_level="Low",
-                        status="Loaded",
-                    )
-                    st.success(f"Loaded scenario #{idx} into Deal Copilot Workbench!")
-                    st.rerun()
-            st.markdown("---")
+                <div class="monad-card" style="padding: 30px;">
+                    <div style="font-size: 11px; text-transform: uppercase; color: #92400e; letter-spacing: 0.05em;">{air['mode']}</div>
+                    <div style="font-size: 24px; font-weight: 500; color: #242424; margin-top: 4px;">{air['cost_aed']} <span style="font-size: 14px; color: #797776;">({air['cost_inr']})</span></div>
+                    <div style="font-size: 13px; color: #4e4d4d; margin-top: 8px;">
+                        ⏱️ <strong>Transit Window:</strong> {air['transit_time']}<br>
+                        💡 <strong>Application:</strong> {air['recommended_for']}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Select an origin port and click 'Calculate Route Benchmarks' to see transit options.")
