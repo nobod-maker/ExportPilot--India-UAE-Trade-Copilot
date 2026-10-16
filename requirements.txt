@@ -10,3 +10,5 @@ pydub>=0.25.1
 static-ffmpeg>=2.5.0
 numpy>=1.24.0
 pandas>=2.0.0
+playwright>=1.40.0
+pytest-playwright>=0.5.0

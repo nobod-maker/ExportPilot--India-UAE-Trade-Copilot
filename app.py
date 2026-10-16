@@ -524,7 +524,7 @@ with tab_docs:
 # =============================================================================
 # TAB 3: RISK AUDITOR ("REASONS NOT TO ACCEPT THIS DEAL")
 # =============================================================================
-with tab_risk_auditor:
+with tab_risk:
     st.markdown(
         """
         <div class="monad-card">

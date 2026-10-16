@@ -1,353 +1,379 @@
-"""Monad Editorial Design System for ExportPilot.
+"""Stripe Design System — Indigo-Ink Ledger on Frosted Glass.
 
-Warm parchment palette (#f6f3f1), Newsreader serif headings (weight 400 only, never bold),
-JetBrains Mono body & UI, 40px bordered cards, 100px pill buttons, and zero drop shadows.
+Strict financial-instrument design language:
+- Pure white canvas (#ffffff) with cool mist (#f8fafd) surfaces and hairline borders (#e5edf5).
+- Single vivid indigo (#533afd) for primary actions, active states, and focus rings.
+- Weight 300 whisper headlines with tight tracking and tabular numerals.
+- 4px radius on buttons, inputs, and cards. No shadows anywhere.
 """
 
-from __future__ import annotations
-
-import streamlit as st
-
-MONAD_CSS = """
+STRIPE_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* ==========================================================================
-   GLOBAL CANVAS & RESET (NEVER PURE WHITE)
-   ========================================================================== */
-html, body, .stApp, [data-testid="stAppViewContainer"], .main, .block-container {
-    background-color: #f6f3f1 !important;
-    color: #242424 !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 15px !important;
-    line-height: 1.6 !important;
+:root {
+  /* Colors */
+  --color-indigo-ink: #533afd;
+  --color-indigo-hover: #7389ff;
+  --color-midnight-ink: #061b31;
+  --color-slate: #64748d;
+  --color-steel: #50617a;
+  --color-smoke: #839bc8;
+  --color-pure-white: #ffffff;
+  --color-mist: #f8fafd;
+  --color-frost: #e5edf5;
+  --color-lavender-border: #b9b9f9;
+  --color-lilac-border: #d6d9fc;
+  --color-periwinkle-wash: #e8e9ff;
+  --color-deep-violet: #182659;
+  --color-amethyst-edge: #7f71e6;
+
+  /* Typography */
+  --font-stripe: 'sohne-var', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Max content width ~1200px centered */
-.block-container {
-    max-width: 1200px !important;
-    padding-top: 1.5rem !important;
-    padding-bottom: 4rem !important;
-    margin: 0 auto !important;
+/* Global Reset & Base Styling */
+html, body, [data-testid="stAppViewContainer"] {
+  background-color: var(--color-pure-white) !important;
+  color: var(--color-midnight-ink) !important;
+  font-family: var(--font-stripe) !important;
+  font-feature-settings: "ss01" on, "tnum" on !important;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ==========================================================================
-   TYPOGRAPHY
-   - Headings: Newsreader Serif, weight 400 ONLY (never bold), letter-spacing -0.02em
-   - UI / Body: JetBrains Mono, uppercase on buttons/tabs/badges
-   ========================================================================== */
-h1, h2, h3, h4, h5, h6,
-.serif-hero, .serif-section, .serif-card-title,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
-    font-family: 'Newsreader', Georgia, serif !important;
-    font-weight: 400 !important;
-    letter-spacing: -0.02em !important;
-    line-height: 1.15 !important;
-    color: #242424 !important;
-    text-transform: none !important;
+[data-testid="stHeader"] {
+  background-color: var(--color-pure-white) !important;
+  border-bottom: 1px solid var(--color-frost) !important;
 }
 
-.serif-hero {
-    font-size: 64px !important;
-    margin-bottom: 1rem !important;
+.stMainBlockContainer {
+  max-width: 1320px !important;
+  padding-top: 1.5rem !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+  padding-bottom: 4rem !important;
 }
 
-.serif-section {
-    font-size: 40px !important;
-    margin-top: 2.5rem !important;
-    margin-bottom: 1.25rem !important;
+/* Zero shadows enforcement */
+*, *::before, *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
 }
 
-.serif-card-title {
-    font-size: 24px !important;
-    margin-bottom: 0.75rem !important;
+/* Top Announcement / Wordmark Bar */
+.announcement-bar, .stripe-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background-color: var(--color-mist) !important;
+  border: 1px solid var(--color-frost);
+  border-radius: 4px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-steel);
 }
 
-p, span, div, label, li, .stMarkdown p, .stMarkdown span {
-    font-family: 'JetBrains Mono', monospace !important;
-    color: #4e4d4d !important;
+.stripe-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-/* ==========================================================================
-   TOP ANNOUNCEMENT BAR
-   ========================================================================== */
-.announcement-bar {
-    background-color: #000000 !important;
-    color: #f6f3f1 !important;
-    padding: 10px 24px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 13px !important;
-    letter-spacing: 0.04em !important;
-    text-transform: uppercase !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    border-radius: 8px !important;
-    margin-bottom: 2rem !important;
+.stripe-wordmark {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--color-midnight-ink);
+  letter-spacing: -0.4px;
 }
 
-.announcement-bar span {
-    color: #f6f3f1 !important;
+.stripe-badge {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--color-periwinkle-wash);
+  color: var(--color-indigo-ink);
+  padding: 4px 8px;
+  border-radius: 9999px;
 }
 
-/* ==========================================================================
-   HERO CONTAINER WITH SOFT BLURRED WASH
-   ========================================================================== */
+/* Hero Section */
 .hero-wrapper {
-    position: relative !important;
-    padding: 3rem 2.5rem 3rem 2.5rem !important;
-    margin-bottom: 3.5rem !important;
-    overflow: hidden !important;
+  margin-bottom: 32px;
 }
 
-.hero-wash {
-    position: absolute !important;
-    top: -20px !important;
-    left: -20px !important;
-    width: 380px !important;
-    height: 220px !important;
-    background: radial-gradient(circle, rgba(255, 148, 115, 0.28) 0%, rgba(160, 181, 235, 0.22) 65%, transparent 100%) !important;
-    filter: blur(60px) !important;
-    z-index: 0 !important;
-    pointer-events: none !important;
+.serif-hero, .stripe-display {
+  font-family: var(--font-stripe) !important;
+  font-size: 52px !important;
+  font-weight: 300 !important;
+  line-height: 1.05 !important;
+  letter-spacing: -1.4px !important;
+  color: var(--color-midnight-ink) !important;
+  margin: 0 0 16px 0 !important;
 }
 
-.hero-content {
-    position: relative !important;
-    z-index: 1 !important;
+.hero-subtitle, .stripe-lead {
+  font-size: 18px !important;
+  line-height: 1.5 !important;
+  color: var(--color-slate) !important;
+  font-weight: 300 !important;
+  max-width: 820px;
+  margin-bottom: 24px !important;
 }
 
-.hero-subtitle {
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 16px !important;
-    color: #4e4d4d !important;
-    max-width: 680px !important;
-    margin-bottom: 2rem !important;
-    line-height: 1.6 !important;
+/* Headings */
+h1, h2, h3, .serif-card-title, .stripe-heading-lg {
+  font-family: var(--font-stripe) !important;
+  font-weight: 300 !important;
+  color: var(--color-midnight-ink) !important;
 }
 
-/* ==========================================================================
-   CARDS (PARCHMENT, 1PX ASH BORDER, 40PX RADIUS, NO SHADOWS)
-   ========================================================================== */
-.monad-card {
-    background-color: #f6f3f1 !important;
-    border: 1px solid #cecac8 !important;
-    border-radius: 40px !important;
-    padding: 40px !important;
-    margin-bottom: 2rem !important;
-    box-shadow: none !important;
+h1 {
+  font-size: 40px !important;
+  letter-spacing: -0.96px !important;
 }
 
-/* Highlight card surface (Periwinkle Mist) for one hero card */
-.monad-card-highlight {
-    background-color: #cfdaf5 !important;
-    border: 1px solid #cecac8 !important;
-    border-radius: 40px !important;
-    padding: 40px !important;
-    margin-bottom: 2rem !important;
-    box-shadow: none !important;
+h2, .stripe-heading-lg {
+  font-size: 28px !important;
+  letter-spacing: -0.64px !important;
 }
 
-.monad-card-highlight * {
-    color: #242424 !important;
+h3, .serif-card-title {
+  font-size: 20px !important;
+  letter-spacing: -0.3px !important;
+  margin-bottom: 12px !important;
 }
 
-/* ==========================================================================
-   BUTTONS (PILL SHAPE 100PX, PADDING 16PX 32PX, UPPERCASE)
-   ========================================================================== */
-/* Default / Secondary button */
-.stButton > button {
-    background-color: #242424 !important;
-    color: #ffffff !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    text-transform: uppercase !important;
-    letter-spacing: -0.02em !important;
-    border-radius: 100px !important;
-    padding: 14px 28px !important;
-    border: 1px solid #242424 !important;
-    box-shadow: none !important;
-    transition: all 0.15s ease !important;
+p, .stripe-body {
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+  color: var(--color-steel) !important;
+  font-weight: 400 !important;
 }
 
-.stButton > button:hover {
-    background-color: #000000 !important;
-    border-color: #000000 !important;
-    color: #ffffff !important;
+/* Cards & Surfaces: 4px radius, no shadow, hairline border */
+.monad-card, .stripe-card {
+  background-color: var(--color-pure-white) !important;
+  border: 1px solid var(--color-frost) !important;
+  border-radius: 4px !important;
+  padding: 24px !important;
+  margin-bottom: 16px !important;
 }
 
-/* Primary Action Button: Lake Blue #2b59d1 */
-.stButton > button[kind="primary"] {
-    background-color: #2b59d1 !important;
-    border-color: #2b59d1 !important;
-    color: #ffffff !important;
+.stripe-card-mist {
+  background-color: var(--color-mist) !important;
+  border: 1px solid var(--color-frost) !important;
+  border-radius: 4px !important;
+  padding: 24px !important;
+  margin-bottom: 16px !important;
 }
 
-.stButton > button[kind="primary"]:hover {
-    background-color: #1e42a3 !important;
-    border-color: #1e42a3 !important;
+.stripe-card-highlight {
+  background-color: var(--color-periwinkle-wash) !important;
+  border: 1px solid var(--color-lilac-border) !important;
+  border-radius: 4px !important;
+  padding: 24px !important;
+  margin-bottom: 16px !important;
 }
 
-/* Ghost Pill Button */
-.btn-ghost {
-    display: inline-block !important;
-    background: transparent !important;
-    color: #242424 !important;
-    border: 1px solid #242424 !important;
-    border-radius: 100px !important;
-    padding: 12px 28px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 13px !important;
-    text-transform: uppercase !important;
-    letter-spacing: -0.02em !important;
-    text-decoration: none !important;
-    text-align: center !important;
+/* Metric / Stat Blocks: Whisper-weight display with tabular numerals */
+.stripe-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-/* ==========================================================================
-   TABS STYLED AS PILLS
-   ========================================================================== */
+.stripe-metric-card {
+  background-color: var(--color-pure-white);
+  border: 1px solid var(--color-frost);
+  border-radius: 4px;
+  padding: 20px;
+}
+
+.stripe-metric-value {
+  font-family: var(--font-stripe);
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: -1.0px;
+  line-height: 1.0;
+  color: var(--color-midnight-ink);
+  font-feature-settings: "tnum" on;
+  margin-bottom: 6px;
+}
+
+.stripe-metric-label {
+  font-size: 13px;
+  color: var(--color-slate);
+  font-weight: 400;
+}
+
+/* Tab Navigation Styling */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px !important;
-    background-color: transparent !important;
-    padding: 8px 0 !important;
-    border-bottom: 1px solid #cecac8 !important;
-    margin-bottom: 2rem !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--color-frost) !important;
+  gap: 8px !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 24px !important;
 }
 
 .stTabs [data-baseweb="tab"] {
-    border-radius: 100px !important;
-    padding: 10px 22px !important;
-    background-color: transparent !important;
-    border: 1px solid #cecac8 !important;
-    color: #4e4d4d !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 12px !important;
-    text-transform: uppercase !important;
-    letter-spacing: -0.02em !important;
+  background-color: transparent !important;
+  color: var(--color-slate) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  padding: 10px 16px !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  transition: all 0.15s ease-in-out !important;
 }
 
-.stTabs [aria-selected="true"] {
-    background-color: #242424 !important;
-    border-color: #242424 !important;
-    color: #f6f3f1 !important;
+.stTabs [data-baseweb="tab"]:hover {
+  color: var(--color-midnight-ink) !important;
+  border-bottom-color: var(--color-lilac-border) !important;
 }
 
-/* ==========================================================================
-   INPUTS & TEXTAREAS (PARCHMENT FILL, 1PX ASH BORDER, RADIUS 20PX)
-   ========================================================================== */
-input, textarea, [data-baseweb="input"], [data-baseweb="textarea"] {
-    background-color: #f6f3f1 !important;
-    border: 1px solid #cecac8 !important;
-    border-radius: 20px !important;
-    color: #242424 !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 14px !important;
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+  color: var(--color-indigo-ink) !important;
+  font-weight: 500 !important;
+  border-bottom-color: var(--color-indigo-ink) !important;
 }
 
-input:focus, textarea:focus,
-[data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {
-    border-color: #242424 !important;
-    box-shadow: none !important;
+/* Buttons: 4px radius, no shadow */
+.stButton > button {
+  background-color: var(--color-pure-white) !important;
+  color: var(--color-indigo-ink) !important;
+  border: 1px solid var(--color-lavender-border) !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  padding: 10px 20px !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease !important;
 }
 
-[data-baseweb="select"] {
-    border-radius: 20px !important;
-    border: 1px solid #cecac8 !important;
-    background-color: #f6f3f1 !important;
+.stButton > button:hover {
+  background-color: var(--color-mist) !important;
+  border-color: var(--color-indigo-ink) !important;
+  color: var(--color-indigo-ink) !important;
 }
 
-/* ==========================================================================
-   TAGS / BADGES (FULL PILL 100PX, 1PX ASH BORDER, UPPERCASE MONO)
-   ========================================================================== */
-.pill-badge {
-    display: inline-block !important;
-    border-radius: 100px !important;
-    border: 1px solid #cecac8 !important;
-    padding: 4px 14px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 11px !important;
-    text-transform: uppercase !important;
-    letter-spacing: -0.02em !important;
-    font-weight: 500 !important;
+.stButton > button[kind="primary"] {
+  background-color: var(--color-indigo-ink) !important;
+  color: var(--color-pure-white) !important;
+  border: 1px solid var(--color-indigo-ink) !important;
 }
 
-.pill-low {
-    background-color: #f6f3f1 !important;
-    color: #1b633e !important;
-    border-color: #a7fccd !important;
+.stButton > button[kind="primary"]:hover {
+  background-color: var(--color-indigo-hover) !important;
+  border-color: var(--color-indigo-hover) !important;
+  color: var(--color-pure-white) !important;
 }
 
-.pill-med {
-    background-color: #f6f3f1 !important;
-    color: #92400e !important;
-    border-color: #ecda98 !important;
+/* Inputs & Text Areas: 4px radius, hairline border */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div {
+  background-color: var(--color-pure-white) !important;
+  color: var(--color-midnight-ink) !important;
+  border: 1px solid var(--color-frost) !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-family: var(--font-stripe) !important;
 }
 
-.pill-high {
-    background-color: #f6f3f1 !important;
-    color: #991b1b !important;
-    border-color: #ff9473 !important;
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+  border-color: var(--color-indigo-ink) !important;
 }
 
-/* ==========================================================================
-   DIVIDERS & EXPANDERS
-   ========================================================================== */
-hr {
-    border: none !important;
-    border-top: 1px solid #cecac8 !important;
-    margin: 3rem 0 !important;
+/* Tables & Dataframes: Ledger format */
+table, .stDataFrame {
+  border-collapse: collapse !important;
+  width: 100% !important;
+  border: 1px solid var(--color-frost) !important;
+  border-radius: 4px !important;
+  background-color: var(--color-pure-white) !important;
 }
 
-/* Custom Expander */
-[data-testid="stExpander"] {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid #cecac8 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    margin-bottom: 1.5rem !important;
+th {
+  background-color: var(--color-mist) !important;
+  color: var(--color-steel) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  border-bottom: 1px solid var(--color-frost) !important;
+  padding: 12px 16px !important;
+  text-align: left !important;
 }
 
-[data-testid="stExpander"] details summary p {
-    font-family: 'Newsreader', Georgia, serif !important;
-    font-size: 22px !important;
-    font-weight: 400 !important;
-    color: #242424 !important;
+td {
+  color: var(--color-midnight-ink) !important;
+  font-size: 14px !important;
+  border-bottom: 1px solid var(--color-frost) !important;
+  padding: 12px 16px !important;
 }
 
-/* Tables */
-table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 13px !important;
+/* Status Badges: Clean tag pills */
+.pill-badge, .badge-indigo {
+  display: inline-block;
+  background-color: var(--color-periwinkle-wash);
+  color: var(--color-indigo-ink);
+  border: 1px solid var(--color-lilac-border);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 9999px;
 }
 
-table th {
-    text-align: left !important;
-    padding: 12px 14px !important;
-    border-bottom: 1px solid #cecac8 !important;
-    color: #797776 !important;
-    text-transform: uppercase !important;
-    font-size: 11px !important;
+.pill-low, .badge-low {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
 }
 
-table td {
-    padding: 12px 14px !important;
-    border-bottom: 1px solid #cecac8 !important;
-    color: #242424 !important;
+.pill-med, .badge-med {
+  background-color: #fffbeb !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
 }
 
-/* Hide default streamlit clutter */
-#MainMenu {visibility: hidden !important;}
-footer {visibility: hidden !important;}
-header {visibility: hidden !important;}
+.pill-high, .badge-high {
+  background-color: #fef2f2 !important;
+  color: #991b1b !important;
+  border-color: #fecaca !important;
+}
+
+/* Monospace code / calculation preview */
+.stripe-code, pre, code {
+  font-family: var(--font-mono) !important;
+  font-size: 13px !important;
+  color: var(--color-deep-violet) !important;
+  background-color: var(--color-mist) !important;
+  border: 1px solid var(--color-frost) !important;
+  border-radius: 4px !important;
+}
+
+/* Divider */
+hr, .stripe-divider {
+  border: none !important;
+  border-top: 1px solid var(--color-frost) !important;
+  margin: 32px 0 !important;
+}
 </style>
 """
 
 
 def load_monad_styles() -> None:
-    """Inject Monad Editorial design styles into the Streamlit app."""
-    st.markdown(MONAD_CSS, unsafe_allow_html=True)
+    """Inject Stripe Financial Ledger design CSS into Streamlit page."""
+    import streamlit as st
+    st.markdown(STRIPE_CSS, unsafe_allow_html=True)
+
+
+def inject_stripe_styles() -> None:
+    """Alias for load_monad_styles."""
+    load_monad_styles()
