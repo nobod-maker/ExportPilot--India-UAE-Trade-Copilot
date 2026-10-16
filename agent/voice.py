@@ -179,7 +179,7 @@ def transcribe_and_translate_audio(
             from google.genai import types
 
             client = genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
             part = types.Part.from_bytes(
                 data=audio_bytes,

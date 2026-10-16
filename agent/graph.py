@@ -57,7 +57,7 @@ def _call_gemini_text(prompt: str, system_instruction: str = "") -> Optional[str
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         config = {}
         if system_instruction:
             config["system_instruction"] = system_instruction
