@@ -3,6 +3,7 @@
 > **Tagline**: *Speak your deal. ExportPilot quotes it, checks the risk, and drafts the buyer message.*  
 > **Championship Category**: Best Business AI Agent (Dubai Create AI Agents Championship)  
 > **Live Demo**: [https://crazy-humans-jam.loca.lt](https://crazy-humans-jam.loca.lt) *(Tunnel Password / IP: `157.51.115.171`)*  
+> **Hugging Face Space**: [https://huggingface.co/spaces/mr-sloth-04/export-pilot-india-uae-trade-copilot](https://huggingface.co/spaces/mr-sloth-04/export-pilot-india-uae-trade-copilot)  
 > **Voice Ingestion**: Tamil, Hindi, English | **Operating Cost**: ₹0 (100% Free Tiers & Open Source)  
 > **GitHub Repository**: [https://github.com/nobod-maker/ExportPilot--India-UAE-Trade-Copilot.git](https://github.com/nobod-maker/ExportPilot--India-UAE-Trade-Copilot.git)
 
