@@ -792,30 +792,7 @@ with tab_tower:
 
     if logs:
         # Build ONE unified HTML table with table-layout: fixed and <colgroup>
-        table_html = [
-            '<div class="audit-table-wrapper">',
-            '<table class="audit-table">',
-            '  <colgroup>',
-            '    <col class="col-time">',  # 15%
-            '    <col class="col-act">',   # 18%
-            '    <col class="col-rat">',   # 37%
-            '    <col class="col-risk">',  # 10%
-            '    <col class="col-stat">',  # 12%
-            '    <col class="col-user">',  # 8%
-            '  </colgroup>',
-            '  <thead>',
-            '    <tr>',
-            '      <th>Timestamp (UTC)</th>',
-            '      <th>Action</th>',
-            '      <th>Governance Rationale</th>',
-            '      <th>Risk Tier</th>',
-            '      <th>Status</th>',
-            '      <th>User</th>',
-            '    </tr>',
-            '  </thead>',
-            '  <tbody>',
-        ]
-
+        rows_html = []
         for entry in logs:
             r_lvl = entry.get("risk_level", "Low")
             pill_c = "pill-high" if r_lvl == "High" else ("pill-med" if r_lvl == "Medium" else "pill-low")
@@ -825,23 +802,47 @@ with tab_tower:
             stat_str = html.escape(str(entry.get("governance_status", "")))
             u_str = html.escape(str(entry.get("user", "system")))
 
-            table_html.append(f"""
-                <tr>
-                    <td style="font-size: 11px; color: #797776;">{t_str}</td>
-                    <td style="font-weight: 500;">{act_str}</td>
-                    <td style="color: #4e4d4d;">{rea_str}</td>
-                    <td><span class="pill-badge {pill_c}">{r_lvl}</span></td>
-                    <td style="font-size: 11px;">{stat_str}</td>
-                    <td><code>{u_str}</code></td>
-                </tr>
-            """)
+            rows_html.append(
+                f'<tr>'
+                f'<td style="font-size: 11px; color: #797776;">{t_str}</td>'
+                f'<td style="font-weight: 500;">{act_str}</td>'
+                f'<td style="color: #4e4d4d;">{rea_str}</td>'
+                f'<td><span class="pill-badge {pill_c}">{r_lvl}</span></td>'
+                f'<td style="font-size: 11px;">{stat_str}</td>'
+                f'<td><code>{u_str}</code></td>'
+                f'</tr>'
+            )
 
-        table_html.append('  </tbody>')
-        table_html.append('</table>')
-        table_html.append('</div>')
+        full_table = (
+            '<div class="audit-table-wrapper">'
+            '<table class="audit-table">'
+            '<colgroup>'
+            '<col class="col-time">'
+            '<col class="col-act">'
+            '<col class="col-rat">'
+            '<col class="col-risk">'
+            '<col class="col-stat">'
+            '<col class="col-user">'
+            '</colgroup>'
+            '<thead>'
+            '<tr>'
+            '<th>Timestamp (UTC)</th>'
+            '<th>Action</th>'
+            '<th>Governance Rationale</th>'
+            '<th>Risk Tier</th>'
+            '<th>Status</th>'
+            '<th>User</th>'
+            '</tr>'
+            '</thead>'
+            '<tbody>'
+            + "".join(rows_html)
+            + '</tbody>'
+            '</table>'
+            '</div>'
+        )
 
-        # Render complete fixed table in ONE block
-        st.markdown("\n".join(table_html), unsafe_allow_html=True)
+        # Render complete fixed table in ONE block (unindented to prevent markdown code block trigger)
+        st.markdown(full_table, unsafe_allow_html=True)
 
         # Admin High-Risk Action Approval / Rejection Controls
         if is_admin:
