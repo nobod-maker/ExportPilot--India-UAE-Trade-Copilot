@@ -15,11 +15,15 @@ Small Indian MSME exporters (garments, spices, leather, agro-commodities, engine
 4. **Trade Regulatory Updates**: Tracking India–UAE CEPA (Comprehensive Economic Partnership Agreement) preferential tariffs and customs documentation.
 
 **ExportPilot** solves this as an autonomous trade copilot:
-- Ingests **multilingual voice notes** (Tamil, Hindi, English) or typed text.
+- Ingests **multilingual voice notes** (Tamil, Hindi, English) or typed text with state-synchronized audio deduplication.
 - Fetches **live INR/AED exchange rates** (`open.er-api.com`).
 - Assesses **CEPA trade intelligence and shipping updates** (DGFT & Gulf feeds, with local cached fallback).
 - Calculates a structured quotation with an **estimated FX volatility protection buffer**.
 - Drafts culturally calibrated, professional English buyer emails.
+- **FedAI Control Tower & Audit Log**: Logs every decision with timestamp, action, rationale, risk classification, and governance state.
+- **Adversarial Risk Auditor**: Analyzes payment terms and aggressively argues why an exporter should reject hazardous terms (e.g. 100% post-delivery) or accept safe terms (LC / advance deposit).
+- **Export Document Agent**: Compiles standard export packing lists (cartons, weights, dimensions, HS codes) and UAE import CEPA compliance checklists.
+- **Corridor Freight Estimator**: Instant benchmark route transit times and freight costs (sea vs air) from Indian export hubs to Dubai/Jebel Ali.
 - **Enforces a strict Human-in-the-Loop (HITL) gate**: The agent prepares and calculates, but **never finalizes or saves deals without an explicit user approval click**.
 
 ---
