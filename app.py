@@ -32,87 +32,133 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom High-End Executive Styling (Anti-Slop Taste Skill)
+# Custom High-End Executive Styling (Theme-Independent Anti-Slop CSS)
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #1e293b;
+/* Force light root canvas regardless of browser theme */
+html, body, .stApp, [data-testid="stAppViewContainer"], .main, .block-container {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
 }
 
 code, kbd, samp, pre {
     font-family: 'JetBrains Mono', monospace !important;
 }
 
-.stApp {
-    background-color: #f8fafc;
+/* Explicit text color for all headings and text elements in main area */
+h1, h2, h3, h4, h5, h6,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6,
+.stMarkdown p, .stMarkdown span, .stMarkdown div, .stMarkdown li,
+[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] span {
+    color: #0f172a !important;
+}
+
+.stCaption, [data-testid="stMarkdownContainer"] small {
+    color: #475569 !important;
+    font-size: 0.85rem !important;
+}
+
+/* Sidebar Explicit Theming */
+[data-testid="stSidebar"] {
+    background-color: #0f172a !important;
+    border-right: 1px solid #1e293b !important;
+}
+
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
+    color: #f8fafc !important;
+}
+
+[data-testid="stSidebar"] .metric-box {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+}
+
+[data-testid="stSidebar"] .metric-box .metric-label {
+    color: #94a3b8 !important;
+}
+
+[data-testid="stSidebar"] .metric-box .metric-val {
+    color: #f8fafc !important;
+}
+
+[data-testid="stSidebar"] .metric-box .metric-sub {
+    color: #38bdf8 !important;
 }
 
 /* Header Banner */
 .brand-header {
-    background: #0f172a;
-    color: #f8fafc;
+    background: #0f172a !important;
+    color: #f8fafc !important;
     padding: 1.5rem 2rem;
     border-radius: 12px;
     margin-bottom: 1.5rem;
     border-left: 6px solid #0284c7;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
 }
 
 .brand-title {
-    font-size: 1.85rem;
-    font-weight: 700;
+    font-size: 1.85rem !important;
+    font-weight: 700 !important;
     letter-spacing: -0.025em;
-    margin: 0;
+    margin: 0 !important;
+    color: #ffffff !important;
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
 .brand-subtitle {
-    font-size: 0.95rem;
-    color: #94a3b8;
-    margin-top: 0.35rem;
-    margin-bottom: 0;
+    font-size: 0.95rem !important;
+    color: #94a3b8 !important;
+    margin-top: 0.35rem !important;
+    margin-bottom: 0 !important;
 }
 
-/* Metric / Status Cards */
+/* Metric / Status Cards in Main View */
 .metric-box {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 10px;
     padding: 1.1rem 1.25rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.metric-box * {
+    color: #0f172a !important;
 }
 
 .metric-label {
-    font-size: 0.75rem;
+    font-size: 0.78rem !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #64748b;
-    font-weight: 600;
+    color: #475569 !important;
+    font-weight: 700 !important;
 }
 
 .metric-val {
-    font-size: 1.45rem;
-    font-weight: 700;
-    color: #0f172a;
+    font-size: 1.45rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
     margin-top: 0.25rem;
 }
 
 .metric-sub {
-    font-size: 0.8rem;
-    color: #0284c7;
+    font-size: 0.82rem !important;
+    color: #0284c7 !important;
     margin-top: 0.15rem;
 }
 
 /* Status Badges */
 .badge-live {
-    background: #ecfdf5;
-    color: #065f46;
-    border: 1px solid #a7f3d0;
+    background: #ecfdf5 !important;
+    color: #065f46 !important;
+    border: 1px solid #a7f3d0 !important;
     padding: 0.2rem 0.6rem;
     border-radius: 9999px;
     font-size: 0.75rem;
@@ -121,9 +167,9 @@ code, kbd, samp, pre {
 }
 
 .badge-risk-low {
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
+    background: #f0fdf4 !important;
+    color: #166534 !important;
+    border: 1px solid #bbf7d0 !important;
     padding: 0.25rem 0.6rem;
     border-radius: 6px;
     font-size: 0.8rem;
@@ -131,31 +177,91 @@ code, kbd, samp, pre {
 }
 
 .badge-hitl {
-    background: #fffbeb;
-    color: #b45309;
-    border: 1px solid #fde68a;
+    background: #fffbeb !important;
+    color: #b45309 !important;
+    border: 1px solid #fde68a !important;
     padding: 0.2rem 0.6rem;
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
 }
 
-/* Quote & Draft Review Container */
+/* Quote Sheet Container & High-Contrast Table */
 .quote-sheet {
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 10px;
-    padding: 1.5rem;
-    margin-top: 1rem;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.quote-sheet table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.quote-sheet table tr {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.quote-label {
+    padding: 8px 0;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    font-size: 0.92rem !important;
+}
+
+.quote-val {
+    padding: 8px 0;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    text-align: right;
+}
+
+.quote-val-accent {
+    padding: 8px 0;
+    color: #0284c7 !important;
+    font-weight: 800 !important;
+    font-size: 1.05rem !important;
+    text-align: right;
+}
+
+.quote-val-total {
+    padding: 10px 0;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    font-size: 1.2rem !important;
+    text-align: right;
 }
 
 .section-label {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: #334155;
+    font-size: 0.92rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 0.75rem;
+}
+
+/* Input / Textarea Contrast Override */
+textarea, input, [data-baseweb="textarea"] textarea {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 8px !important;
+    font-size: 0.95rem !important;
+}
+
+textarea:focus, input:focus {
+    border-color: #0284c7 !important;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* Buttons */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
 }
 
 /* Hide default streamlit header clutter */
@@ -192,7 +298,7 @@ init_session_state()
 st.markdown(
     """
     <div class="brand-header">
-        <h1 class="brand-title">🚢 ExportPilot <span style="font-size: 1rem; font-weight: 400; color: #38bdf8;">| India–UAE Trade Copilot</span></h1>
+        <h1 class="brand-title">🚢 ExportPilot <span style="font-size: 1.1rem; font-weight: 400; color: #38bdf8;">| India–UAE Trade Copilot</span></h1>
         <p class="brand-subtitle">
             Voice-driven deal quoting, CEPA tariff intelligence, live INR/AED rates, and cultural buyer negotiation drafting.
             <span class="badge-hitl" style="margin-left: 10px;">🛡️ Zero-finalize without Human Approval</span>
@@ -234,9 +340,9 @@ with st.sidebar:
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     has_gemini = bool(gemini_key and not gemini_key.startswith("your_") and len(gemini_key) > 10)
     if has_gemini:
-        st.success("Gemini 2.5 Flash connected")
+        st.success(f"Gemini Connected ({os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')})")
     else:
-        st.info("Operating in Resilient Offline Fallback mode (No API Key Required for Demo)")
+        st.info("Operating in Resilient Offline Fallback mode (No API Key Required)")
 
     st.caption("Dubai Create AI Agents Championship | Cost: ₹0")
 
@@ -251,15 +357,30 @@ with tab_quote:
         st.markdown("#### 1. Speak or Enter Your Deal Request")
         st.caption("Accepts Tamil (தமிழ்), Hindi (हिन्दी), or English voice notes & text.")
 
-        # Voice Input Component
-        audio_val = st.audio_input("🎙️ Record Voice Request")
-        if audio_val is not None:
-            audio_bytes = audio_val.read()
-            with st.spinner("Processing multilingual speech via Gemini..."):
-                v_res = transcribe_and_translate_audio(audio_bytes)
-                st.session_state.voice_meta = v_res
+        # Voice Input Component with Safe Error Handling
+        try:
+            audio_val = st.audio_input("🎙️ Record Voice Request")
+            if audio_val is not None:
+                audio_bytes = audio_val.read()
+                with st.spinner("Processing speech via Gemini..."):
+                    v_res = transcribe_and_translate_audio(audio_bytes)
+                    if v_res and v_res.get("english"):
+                        st.session_state.voice_meta = v_res
+                    else:
+                        st.warning("Speech not detected clearly. Please type your deal below.")
+        except Exception as mic_err:
+            st.warning("Mic unavailable. Please type your request below or check microphone permissions.")
 
-        # If voice was recorded, show transcription badge
+        st.markdown(
+            """
+            <p style="font-size: 0.78rem; color: #64748b; margin-top: -6px; margin-bottom: 12px;">
+                🔒 <em>Tip: If your browser shows 'An error has occurred', click the lock icon left of <strong>localhost:8501</strong>, set <strong>Microphone → Allow</strong>, and reload. Or simply type your request in the box below.</em>
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # If voice was recorded or loaded, show transcription badge
         if st.session_state.voice_meta:
             vm = st.session_state.voice_meta
             st.info(
@@ -282,7 +403,7 @@ with tab_quote:
         )
 
         # Quick preset buttons for instant evaluation
-        st.markdown("<p style='font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem;'>Or select quick sample scenario:</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 0.82rem; color: #475569; font-weight: 600; margin-bottom: 0.35rem;'>Or select quick sample scenario:</p>", unsafe_allow_html=True)
         q_cols = st.columns(3)
         with q_cols[0]:
             if st.button("👕 500 Cotton Shirts (Dubai)", use_container_width=True):
@@ -315,12 +436,12 @@ with tab_quote:
                 <div class="metric-label">India–UAE CEPA Bilateral Corridor</div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
                     <span class="badge-risk-low">🛡️ Overall Risk: Low</span>
-                    <span style="font-size: 0.8rem; color: #64748b;">Source: {news_data.get('source', 'DGFT Desk')}</span>
+                    <span style="font-size: 0.8rem; color: #475569;">Source: {news_data.get('source', 'DGFT Desk')}</span>
                 </div>
-                <ul style="font-size: 0.82rem; margin-top: 0.75rem; padding-left: 1.2rem; color: #334155;">
-                    <li>Zero/reduced tariffs on 90%+ Indian goods under India-UAE CEPA.</li>
-                    <li>Jebel Ali Port (DP World) operating on 3–5 day direct maritime transit.</li>
-                    <li>USD/AED pegged at 3.6725 ensuring cross-rate consistency.</li>
+                <ul style="font-size: 0.84rem; margin-top: 0.75rem; padding-left: 1.2rem; color: #1e293b; line-height: 1.5;">
+                    <li><strong>CEPA Duty Access:</strong> Zero or concessional tariffs on 90%+ Indian goods.</li>
+                    <li><strong>Maritime Logistics:</strong> Western Indian ports (Nhava Sheva/Mundra) to Jebel Ali operating on regular 3–5 day direct sailing.</li>
+                    <li><strong>Currency Peg:</strong> USD/AED pegged at 3.6725 ensuring predictable cross-rates.</li>
                 </ul>
             </div>
             """,
@@ -341,7 +462,7 @@ with tab_quote:
 
         st.markdown("---")
         st.markdown("### 3. Agent Review & Human Approval Gate")
-        st.caption("Examine the generated quotation breakdown and buyer draft. The deal is **NOT saved** until you click 'Approve & Save Deal'.")
+        st.caption("Examine the generated quotation breakdown and buyer draft. The deal is **NOT saved** until you click 'Approve & Save Deal to Archive'.")
 
         col_q, col_draft = st.columns([1, 1.2], gap="large")
 
@@ -350,34 +471,34 @@ with tab_quote:
             st.markdown(
                 f"""
                 <div class="quote-sheet">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 6px 0; color: #64748b;">Product Description</td>
-                            <td style="padding: 6px 0; font-weight: 600; text-align: right;">{q_data.get('item')}</td>
+                    <table>
+                        <tr>
+                            <td class="quote-label">Product Description</td>
+                            <td class="quote-val">{q_data.get('item', 'Goods')}</td>
                         </tr>
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 6px 0; color: #64748b;">Quantity Units</td>
-                            <td style="padding: 6px 0; font-weight: 600; text-align: right;">{q_data.get('quantity', 0):,.0f}</td>
+                        <tr>
+                            <td class="quote-label">Quantity Units</td>
+                            <td class="quote-val">{q_data.get('quantity', 0):,.0f}</td>
                         </tr>
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 6px 0; color: #64748b;">Unit Price (INR)</td>
-                            <td style="padding: 6px 0; font-weight: 600; text-align: right;">₹{q_data.get('unit_price_inr', 0):,.2f}</td>
+                        <tr>
+                            <td class="quote-label">Unit Price (INR)</td>
+                            <td class="quote-val">₹{q_data.get('unit_price_inr', 0):,.2f}</td>
                         </tr>
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 6px 0; color: #64748b;">Total Value (INR)</td>
-                            <td style="padding: 6px 0; font-weight: 600; text-align: right;">₹{q_data.get('total_inr', 0):,.2f}</td>
+                        <tr>
+                            <td class="quote-label">Total Value (INR)</td>
+                            <td class="quote-val">₹{q_data.get('total_inr', 0):,.2f}</td>
                         </tr>
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 6px 0; color: #64748b;">Applied FX Rate</td>
-                            <td style="padding: 6px 0; font-weight: 600; text-align: right;">1 INR = {q_data.get('fx_rate', 0):.4f} AED</td>
+                        <tr>
+                            <td class="quote-label">Applied FX Rate</td>
+                            <td class="quote-val">1 INR = {q_data.get('fx_rate', 0):.4f} AED</td>
                         </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
-                            <td style="padding: 8px 4px; font-weight: 700; color: #0f172a;">Unit Price (AED)</td>
-                            <td style="padding: 8px 4px; font-weight: 700; color: #0284c7; text-align: right;">AED {q_data.get('unit_price_target', 0):,.2f}</td>
+                        <tr style="background: #f8fafc; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
+                            <td class="quote-label" style="font-weight: 700 !important; color: #0f172a !important;">Unit Price (AED)</td>
+                            <td class="quote-val-accent">AED {q_data.get('unit_price_target', 0):,.2f}</td>
                         </tr>
                         <tr style="background: #f1f5f9;">
-                            <td style="padding: 10px 4px; font-weight: 700; color: #0f172a;">Total Quote (CIF Dubai)</td>
-                            <td style="padding: 10px 4px; font-weight: 800; color: #0f172a; font-size: 1.15rem; text-align: right;">AED {q_data.get('total_target', 0):,.2f}</td>
+                            <td class="quote-label" style="font-weight: 800 !important; color: #0f172a !important; font-size: 1rem !important;">Total Quote (CIF Dubai)</td>
+                            <td class="quote-val-total">AED {q_data.get('total_target', 0):,.2f}</td>
                         </tr>
                     </table>
                 </div>
@@ -391,12 +512,12 @@ with tab_quote:
                 f"""
                 <div class="metric-box" style="margin-top: 1rem; border-left: 4px solid #10b981;">
                     <div class="metric-label">Estimated FX Volatility Buffer Protected</div>
-                    <div class="metric-val" style="color: #065f46;">AED {est_buffer:,.2f}</div>
-                    <div style="font-size: 0.78rem; color: #475569; margin-top: 0.35rem;">
+                    <div class="metric-val" style="color: #065f46 !important;">AED {est_buffer:,.2f}</div>
+                    <div style="font-size: 0.8rem; color: #334155; margin-top: 0.35rem;">
                         <strong>Transparent Formula:</strong> <code>{q_data.get('buffer_formula')}</code>
                     </div>
-                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.2rem;">
-                        Protects MSME margin against 2.5% inter-bank settlement fluctuation during delivery cycle.
+                    <div style="font-size: 0.78rem; color: #64748b; margin-top: 0.25rem;">
+                        Protects MSME margin against 2.5% inter-bank settlement fluctuation during shipping and payment cycle.
                     </div>
                 </div>
                 """,
@@ -451,7 +572,6 @@ with tab_history:
     deals = get_deals()
     if deals:
         df_deals = pd.DataFrame(deals)
-        # Select and format display columns
         display_cols = [
             "id",
             "created_at",
