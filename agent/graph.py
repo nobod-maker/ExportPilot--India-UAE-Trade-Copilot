@@ -48,8 +48,15 @@ class TradeAgentState(TypedDict, total=False):
     error: Optional[str]
 
 
+_QUOTA_EXHAUSTED = False
+
+
 def _call_gemini_text(prompt: str, system_instruction: str = "") -> Optional[str]:
     """Call Google Gemini Flash API via google-genai SDK if API key exists."""
+    global _QUOTA_EXHAUSTED
+    if _QUOTA_EXHAUSTED:
+        return None
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key or api_key.startswith("your_") or len(api_key) < 10:
         return None
@@ -57,7 +64,7 @@ def _call_gemini_text(prompt: str, system_instruction: str = "") -> Optional[str
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         config = {}
         if system_instruction:
             config["system_instruction"] = system_instruction
@@ -70,7 +77,12 @@ def _call_gemini_text(prompt: str, system_instruction: str = "") -> Optional[str
         if response and response.text:
             return response.text.strip()
     except Exception as exc:
-        logger.warning("Gemini API call failed (%s); switching to resilient offline fallback.", exc)
+        err_msg = str(exc)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
+            _QUOTA_EXHAUSTED = True
+            logger.warning("Gemini API quota exhausted (429); tripping circuit breaker to offline fallback.")
+        else:
+            logger.warning("Gemini API call failed (%s); switching to resilient offline fallback.", exc)
     return None
 
 

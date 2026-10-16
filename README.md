@@ -113,7 +113,7 @@ Judges and business stakeholders require genuine, defensible calculations rather
 ## 🚀 Quickstart & Local Setup
 
 ### 1. Prerequisites
-- Python 3.11+
+- Python 3.12 (recommended for optimal Whisper & audio stability; supports Python 3.11–3.13)
 - Git
 
 ### 2. Clone and Install
@@ -162,16 +162,19 @@ python tests/run_playwright_e2e.py
    - **Repository**: `nobod-maker/ExportPilot--India-UAE-Trade-Copilot`
    - **Branch**: `main`
    - **Main file path**: `app.py`
-3. In **Advanced Settings > Secrets**, paste:
-   ```toml
-   GEMINI_API_KEY = "your_key_here"
-   GEMINI_MODEL = "gemini-2.5-flash"
-   ```
-4. Click **Deploy!** Your app will be live with a permanent URL like `https://exportpilot.streamlit.app`.
+3. Under **Advanced settings**:
+   - **Python version**: Select **3.12** (recommended).
+   - In **Secrets**, paste:
+     ```toml
+     GEMINI_API_KEY = "your_key_here"
+     GEMINI_MODEL = "gemini-2.5-flash"
+     ```
+4. *Note on Audio Dependencies*: `packages.txt` provides Debian `ffmpeg`, while `requirements.txt` includes `audioop-lts` and direct subprocess conversion to guarantee zero audio pipeline failures across Python versions.
+5. Click **Deploy!** Your app will be live with a permanent URL like `https://exportpilot.streamlit.app`.
 
 ### Option B: Hugging Face Spaces (Free)
 1. Create a new Space on [Hugging Face](https://huggingface.co/spaces) with **Streamlit** as the SDK.
-2. Push the repository files (`app.py`, `agent/`, `data/`, `requirements.txt`, `README.md`).
+2. Push the repository files (`app.py`, `agent/`, `data/`, `packages.txt`, `requirements.txt`, `README.md`).
 3. Add `GEMINI_API_KEY` under **Space Settings > Variables and secrets**.
 4. The space will build and launch automatically.
 

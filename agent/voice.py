@@ -181,46 +181,110 @@ def audio_bytes_to_float32_samples(
 ) -> Tuple[np.ndarray, float]:
     """Decode audio into 16 kHz mono float32 numpy array.
 
-    Bypasses PyAV container bugs by providing direct PCM float32 samples to whisper.
+    Uses direct FFmpeg subprocess conversion without relying on pydub/audioop,
+    ensuring full compatibility with Python 3.13 and Streamlit Cloud.
     """
-    from pydub import AudioSegment
+    # 1. Initialize static-ffmpeg if available
+    try:
+        import static_ffmpeg
+        static_ffmpeg.add_paths()
+    except Exception:
+        pass
 
-    buffer = io.BytesIO(audio_bytes)
-    if format_hint:
-        fmt = format_hint.lower().replace(".", "").strip()
-        if fmt in ["opus", "webm", "audio/webm", "video/webm"]:
-            fmt = "webm"
-        elif fmt in ["mp3", "audio/mp3", "audio/mpeg"]:
-            fmt = "mp3"
-        elif fmt in ["m4a", "audio/m4a", "audio/x-m4a"]:
-            fmt = "m4a"
-        elif fmt in ["ogg", "audio/ogg"]:
-            fmt = "ogg"
-        elif fmt in ["wav", "audio/wav", "audio/x-wav"]:
-            fmt = "wav"
+    import shutil
+    import subprocess
+    ffmpeg_bin = shutil.which("ffmpeg")
+
+    # Method A: Direct FFmpeg subprocess (Fastest, zero audioop dependency)
+    if ffmpeg_bin:
         try:
-            audio = AudioSegment.from_file(buffer, format=fmt)
-        except Exception:
-            buffer.seek(0)
+            cmd = [
+                ffmpeg_bin,
+                "-y",
+                "-i", "pipe:0",
+                "-f", "s16le",
+                "-acodec", "pcm_s16le",
+                "-ac", "1",
+                "-ar", "16000",
+                "pipe:1",
+            ]
+            proc = subprocess.run(
+                cmd,
+                input=audio_bytes,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            raw_samples = np.frombuffer(proc.stdout, dtype=np.int16)
+            if len(raw_samples) > 0:
+                float_samples = raw_samples.astype(np.float32) / 32768.0
+                duration_sec = len(float_samples) / 16000.0
+                return float_samples, duration_sec
+        except Exception as ffmpeg_err:
+            logger.warning("Direct FFmpeg conversion notice (%s); attempting fallback.", ffmpeg_err)
+
+    # Method B: Pydub fallback (if audioop / audioop-lts is present)
+    try:
+        from pydub import AudioSegment
+        buffer = io.BytesIO(audio_bytes)
+        if format_hint:
+            fmt = format_hint.lower().replace(".", "").strip()
+            if fmt in ["opus", "webm", "audio/webm", "video/webm"]:
+                fmt = "webm"
+            elif fmt in ["mp3", "audio/mp3", "audio/mpeg"]:
+                fmt = "mp3"
+            elif fmt in ["m4a", "audio/m4a", "audio/x-m4a"]:
+                fmt = "m4a"
+            elif fmt in ["ogg", "audio/ogg"]:
+                fmt = "ogg"
+            elif fmt in ["wav", "audio/wav", "audio/x-wav"]:
+                fmt = "wav"
+            try:
+                audio = AudioSegment.from_file(buffer, format=fmt)
+            except Exception:
+                buffer.seek(0)
+                audio = AudioSegment.from_file(buffer)
+        else:
             audio = AudioSegment.from_file(buffer)
-    else:
-        audio = AudioSegment.from_file(buffer)
 
-    # Convert to 16,000 Hz, 1 channel (mono)
-    audio = audio.set_frame_rate(16000).set_channels(1)
-    duration_sec = len(audio) / 1000.0
+        audio = audio.set_frame_rate(16000).set_channels(1)
+        duration_sec = len(audio) / 1000.0
+        raw_samples = np.array(audio.get_array_of_samples())
+        if audio.sample_width == 2:
+            float_samples = raw_samples.astype(np.float32) / 32768.0
+        elif audio.sample_width == 4:
+            float_samples = raw_samples.astype(np.float32) / 2147483648.0
+        elif audio.sample_width == 1:
+            float_samples = (raw_samples.astype(np.float32) - 128.0) / 128.0
+        else:
+            float_samples = raw_samples.astype(np.float32) / (2 ** (audio.sample_width * 8 - 1))
+        return float_samples, duration_sec
+    except Exception as pydub_err:
+        logger.warning("Pydub conversion fallback notice (%s).", pydub_err)
 
-    raw_samples = np.array(audio.get_array_of_samples())
-    if audio.sample_width == 2:
-        float_samples = raw_samples.astype(np.float32) / 32768.0
-    elif audio.sample_width == 4:
-        float_samples = raw_samples.astype(np.float32) / 2147483648.0
-    elif audio.sample_width == 1:
-        float_samples = (raw_samples.astype(np.float32) - 128.0) / 128.0
-    else:
-        float_samples = raw_samples.astype(np.float32) / (2 ** (audio.sample_width * 8 - 1))
+    # Method C: Native Python standard library wave fallback (works on pure PCM WAV)
+    try:
+        import wave
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+            n_ch = wf.getnchannels()
+            sw = wf.getsampwidth()
+            fr = wf.getframerate()
+            frames = wf.readframes(wf.getnframes())
+            if sw == 2:
+                samples = np.frombuffer(frames, dtype=np.int16)
+                if n_ch == 2:
+                    samples = samples[::2]
+                float_samples = samples.astype(np.float32) / 32768.0
+                duration_sec = len(float_samples) / fr
+                return float_samples, duration_sec
+    except Exception:
+        pass
 
-    return float_samples, duration_sec
+    raise RuntimeError(
+        "FFmpeg is missing or unable to convert audio. "
+        "On Streamlit Cloud, verify 'packages.txt' contains 'ffmpeg'. "
+        "Locally, install ffmpeg or run 'pip install static-ffmpeg audioop-lts'."
+    )
 
 
 def translate_text_to_english(text: str, source_lang: str) -> str:

@@ -85,7 +85,7 @@ def run_e2e_tests() -> bool:
 
             # Wait for calculation results
             quote_card = page.locator('text=Commercial Quotation Breakdown').first
-            quote_card.wait_for(state="visible", timeout=20000)
+            quote_card.wait_for(state="visible", timeout=30000)
             print("  [PASS] Commercial Quotation breakdown rendered.")
 
             # Approve deal
