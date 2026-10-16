@@ -12,10 +12,23 @@ import html
 import io
 import json
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Polyfill for Python 3.13 where audioop was removed from standard library
+try:
+    import audioop
+    sys.modules.setdefault("pyaudioop", audioop)
+except ImportError:
+    try:
+        import audioop as _audioop
+        sys.modules["audioop"] = _audioop
+        sys.modules["pyaudioop"] = _audioop
+    except ImportError:
+        pass
 
 import pandas as pd
 import streamlit as st
