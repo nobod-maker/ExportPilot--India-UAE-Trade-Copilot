@@ -157,11 +157,28 @@ def run_e2e_tests() -> bool:
             risk_tab.click()
             page.wait_for_timeout(1000)
 
+            # Test 10% payment after delivery query
+            input_box = page.locator('textarea[aria-label="Enter deal proposal to audit:"]').first
+            input_box.wait_for(state="visible", timeout=5000)
+            input_box.fill("The buyer wants 10% payment after delivery and is a new customer ordering 2000 units.")
+            input_box.press("Control+Enter")
+            page.wait_for_timeout(1000)
+
             audit_btn = page.locator('button:has-text("AUDIT DEAL RISK")').first
             audit_btn.wait_for(state="visible", timeout=5000)
             audit_btn.click()
             page.locator('text=Risk Auditor Verdict').first.wait_for(state="visible", timeout=10000)
-            print("  [PASS] Adversarial Risk Auditor warnings rendered.")
+
+            # Verify accurate calculation: Medium risk, 10% retention, 90% upfront, NO false 100%
+            page.locator('text=Risk: MEDIUM').first.wait_for(state="visible", timeout=5000)
+            page.locator('text=10%').first.wait_for(state="visible", timeout=5000)
+            page.locator('text=90%').first.wait_for(state="visible", timeout=5000)
+            assert page.locator('text=100% payment after delivery').count() == 0
+            print("  [PASS] Adversarial Risk Auditor accurately parsed 10% retention and 2000 units.")
+
+            risk_ss = SCREENSHOT_DIR / "06_monad_risk_auditor_fixed.png"
+            page.screenshot(path=str(risk_ss), full_page=True)
+            print(f"  [SAVED] Screenshot: {risk_ss}")
 
             # -----------------------------------------------------------------
             # TEST 6: Admin Login & Full Audit Access

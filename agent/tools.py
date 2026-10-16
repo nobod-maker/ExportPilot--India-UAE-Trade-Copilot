@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -440,20 +441,143 @@ def update_audit_log_status(
         conn.close()
 
 
-def audit_risk_assessment(deal_input: str | Dict[str, Any]) -> Dict[str, Any]:
-    """Evaluate deal terms aggressively from a risk auditor perspective.
+def _call_gemini_risk_audit(deal_text: str) -> Optional[Dict[str, Any]]:
+    """Attempt dynamic risk audit via Gemini Flash API."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key.startswith("your_") or len(api_key) < 10:
+        return None
 
-    Argues why an exporter should NOT accept bad trade terms (e.g. 100% post delivery).
+    prompt = (
+        "You are an expert trade risk auditor protecting Indian exporters doing business with the UAE.\n"
+        f'Analyze this proposed deal proposal: "{deal_text}"\n\n'
+        "Return ONLY a valid JSON object matching this schema:\n"
+        "{\n"
+        '  "risk_level": "Low" | "Medium" | "High",\n'
+        '  "recommendation": "Concise headline recommendation (e.g. REJECT, CONDITIONAL APPROVAL, ACCEPTABLE WITH SAFEGUARDS)",\n'
+        '  "reasons": [\n'
+        '    "Specific reason 1 accurately referencing the numbers/terms in the offer",\n'
+        '    "Specific reason 2",\n'
+        '    "Actionable counter-offer or safeguard directive"\n'
+        "  ]\n"
+        "}\n"
+        "CRITICAL INSTRUCTIONS:\n"
+        "- If the buyer asks for a specific percentage post-delivery (e.g., 10% after delivery), acknowledge that the remaining portion (e.g., 90%) is paid before or at dispatch. Do NOT say '100% payment after delivery' unless 100% was explicitly requested!\n"
+        "- If a new buyer orders a large quantity with only a small retention (e.g. 10%), classify as Medium risk with buyer verification steps, not High/Default risk.\n"
+        "- Always keep reasons concise, professional, and practical for an MSME exporter."
+    )
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+        )
+        if response and response.text:
+            cleaned = response.text.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                cleaned = "\n".join(lines).strip()
+            data = json.loads(cleaned)
+            if "risk_level" in data and "recommendation" in data and isinstance(data.get("reasons"), list):
+                rl = str(data["risk_level"]).capitalize()
+                if rl in ["Low", "Medium", "High"]:
+                    data["risk_level"] = rl
+                    return data
+    except Exception as exc:
+        logger.warning("Gemini risk audit call notice (%s); using intelligent rule engine.", exc)
+    return None
+
+
+def audit_risk_assessment(deal_input: str | Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate deal terms aggressively and accurately from a risk auditor perspective.
+
+    Argues why an exporter should NOT accept bad trade terms, while accurately parsing
+    percentages (e.g. 10% retention vs 100% credit) and order volumes.
     """
     text = deal_input if isinstance(deal_input, str) else str(deal_input)
     lower_text = text.lower()
 
-    # High Risk Patterns
-    is_post_delivery = any(p in lower_text for p in ["after delivery", "post delivery", "100% after", "payment on arrival", "open account"])
-    is_new_customer = any(p in lower_text for p in ["new customer", "first time", "unverified buyer", "unknown buyer"])
-    is_safe_advance = any(p in lower_text for p in ["letter of credit", "lc", "advance", "30%", "50%", "deposit", "tt in advance"])
+    # Try LLM first if configured
+    gemini_verdict = _call_gemini_risk_audit(text)
+    if gemini_verdict:
+        audit_log_event(
+            action="Adversarial Risk Audit",
+            reason=f"Risk Auditor evaluated terms: '{text[:80]}...' -> {gemini_verdict['recommendation']}",
+            risk_level=gemini_verdict["risk_level"],
+            status="Review Completed",
+        )
+        return {
+            "risk_level": gemini_verdict["risk_level"],
+            "recommendation": gemini_verdict["recommendation"],
+            "reasons": gemini_verdict["reasons"],
+            "analyzed_query": text,
+        }
 
-    if is_post_delivery or (is_new_customer and not is_safe_advance):
+    # Extract percentage post delivery / after arrival
+    post_pct_match = re.search(
+        r'(\d+)\s*%\s*(?:payment\s*)?(?:after\s*delivery|post\s*delivery|on\s*arrival|upon\s*delivery|upon\s*arrival|at\s*destination|after\s*receipt)',
+        lower_text,
+    )
+    if not post_pct_match:
+        post_pct_match = re.search(
+            r'(?:payment\s+of\s+)?(\d+)\s*%\s*(?:after\s*delivery|post\s*delivery|on\s*arrival|upon\s*delivery)',
+            lower_text,
+        )
+
+    # Extract advance percentage
+    adv_pct_match = re.search(
+        r'(\d+)\s*%\s*(?:advance|deposit|upfront|down\s*payment|prior\s*to\s*dispatch)',
+        lower_text,
+    )
+
+    # Quantity extraction
+    qty_match = re.search(r'(\d[\d,]*)\s*(?:units|pcs|pieces|cartons|kg|tons)', lower_text)
+    qty_str = f" ({qty_match.group(0)})" if qty_match else ""
+
+    # Contextual flags
+    is_new_customer = any(p in lower_text for p in ["new customer", "first time", "first order", "unverified buyer", "unknown buyer", "new buyer"])
+    has_lc = any(p in lower_text for p in ["letter of credit", " lc", "lc ", "irrevocable lc", "sight lc"])
+    has_advance = any(p in lower_text for p in ["advance", "deposit", "upfront", "tt in advance"])
+
+    # Branch 1: Specific Post-Delivery Percentage Detected
+    if post_pct_match:
+        post_pct = int(post_pct_match.group(1))
+        upfront_pct = max(0, 100 - post_pct)
+
+        if post_pct >= 70:
+            risk_level = "High"
+            recommendation = "REJECT / COUNTER-OFFER REQUIRED"
+            reasons = [
+                f"Severe Payment Default Risk: Buyer requests {post_pct}% deferred payment after delivery without financial collateral or LC.",
+                "Lack of Recourse: Once cargo clears Jebel Ali customs, legal recovery and repossession costs from UAE exceed 40% of cargo value.",
+                "Cross-Border Working Capital Lockup: Unfunded manufacturing and transit time causes severe cashflow strain.",
+                "Counter-Offer Directive: Insist on minimum 30% advance TT deposit prior to container dispatch, and balance against draft Bill of Lading, or Irrevocable LC at Sight issued by a reputable UAE bank (e.g., Emirates NBD, FAB).",
+            ]
+        elif post_pct > 30:
+            risk_level = "High" if is_new_customer else "Medium"
+            recommendation = "COUNTER-OFFER REQUIRED (REDUCE DEFERRED BALANCE)"
+            reasons = [
+                f"Substantial Deferred Exposure: Deferring {post_pct}% post-delivery leaves significant working capital at risk.",
+                f"Secured Balance: While {upfront_pct}% is covered prior to or upon dispatch, the {post_pct}% post-delivery balance lacks enforceable security once customs cleared.",
+                "Counter-Offer Directive: Propose 30% advance TT deposit, 60% against shipping documents (CAD/BL), and cap post-delivery retention at maximum 10% payable within 7 days of inspection.",
+            ]
+        else:  # post_pct <= 30 (e.g., 10%)
+            risk_level = "Medium" if is_new_customer else "Low"
+            recommendation = "PROCEED WITH CAUTION (VERIFY NEW BUYER & SECURE 90%)" if is_new_customer else "ACCEPTABLE COMMERCIAL TERMS (STANDARD RETENTION)"
+            reasons = [
+                f"Manageable Retention Balance: Buyer requests only {post_pct}% deferred post-delivery payment; {upfront_pct}% must be secured upfront or against shipping documents.",
+                f"Customer Exposure: {'First-time buyer with substantial order volume' + qty_str + '; mandatory commercial verification via Dubai Economy (DED) or UAE National Economic Register (NER) recommended.' if is_new_customer else 'Established customer profile with manageable inspection retention.'}",
+                f"Safeguard Directive: Ensure {upfront_pct}% payment is received via advance TT or Irrevocable LC before container departure, with the {post_pct}% balance payable strictly within 7 business days of delivery.",
+            ]
+
+    # Branch 2: General / 100% Uncollateralized Post-Delivery or Open Account
+    elif any(p in lower_text for p in ["after delivery", "post delivery", "payment on arrival", "open account"]):
         risk_level = "High"
         recommendation = "REJECT / COUNTER-OFFER REQUIRED"
         reasons = [
@@ -462,14 +586,29 @@ def audit_risk_assessment(deal_input: str | Dict[str, Any]) -> Dict[str, Any]:
             "Cross-Border Working Capital Lockup: Unfunded manufacturing and transit time causes severe cashflow strain.",
             "Counter-Offer Directive: Insist on minimum 30% advance TT deposit prior to container dispatch, and balance against draft Bill of Lading, or Irrevocable LC at Sight issued by a reputable UAE bank (e.g., Emirates NBD, FAB).",
         ]
-    elif is_safe_advance:
+
+    # Branch 3: Safe Advance or Letter of Credit
+    elif has_lc or (has_advance and not is_new_customer) or (adv_pct_match and int(adv_pct_match.group(1)) >= 30):
         risk_level = "Low"
         recommendation = "ACCEPTABLE WITH STANDARD CEPA SAFEGUARDS"
+        adv_str = f"{adv_pct_match.group(1)}% " if adv_pct_match else ""
         reasons = [
-            "Structured Financial Protection: Advance deposit or Letter of Credit protects the manufacturing cost floor.",
+            f"Structured Financial Protection: {adv_str}Advance deposit or Letter of Credit protects the manufacturing cost floor.",
             "Bilateral Legal Enforcement: LC governed by UCP 600 rules provides bank-guaranteed payment upon compliant documentation.",
             "Pre-shipment verification and CEPA Certificate of Origin ensures zero-tariff clearance.",
         ]
+
+    # Branch 4: New Customer with Unspecified Terms
+    elif is_new_customer:
+        risk_level = "Medium"
+        recommendation = "CONDITIONAL APPROVAL (CREDIT VERIFICATION REQUIRED)"
+        reasons = [
+            f"Unverified New Buyer{qty_str}: Commercial credit history and company registration in the UAE should be verified.",
+            "Payment terms require formalization: Mandate minimum 30% advance TT or Irrevocable LC at Sight.",
+            "Recommend obtaining export credit insurance (ECGC India) and specifying CIF Jebel Ali terms.",
+        ]
+
+    # Branch 5: Default / Ambiguous Terms
     else:
         risk_level = "Medium"
         recommendation = "CONDITIONAL APPROVAL (CREDIT VERIFICATION REQUIRED)"

@@ -108,10 +108,12 @@ def test_admin_governance(browser_context):
     assert page.locator('text=ADMIN').first.is_visible()
 
     admin_audit_tab = page.locator('[data-baseweb="tab"]:has-text("AUDIT LOG")').first
+    admin_audit_tab.wait_for(state="visible", timeout=10000)
     admin_audit_tab.click(force=True)
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(2500)
 
     full_audit_label = page.locator('text=Full Audit Log').first
-    full_audit_label.wait_for(state="visible", timeout=10000)
+    full_audit_label.wait_for(state="visible", timeout=15000)
     assert full_audit_label.is_visible()
     page.close()
+

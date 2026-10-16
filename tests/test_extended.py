@@ -68,6 +68,17 @@ def test_risk_auditor_safe_deal():
     assert "ACCEPTABLE" in res["recommendation"]
 
 
+def test_risk_auditor_partial_retention_deal():
+    """Verify that 10% post-delivery retention is accurately calculated without claiming 100%."""
+    deal = "The buyer wants 10% payment after delivery and is a new customer ordering 2000 units."
+    res = audit_risk_assessment(deal)
+    assert res["risk_level"] == "Medium"
+    assert "CAUTION" in res["recommendation"] or "VERIFY" in res["recommendation"]
+    # Ensure it never falsely claims 100%
+    assert not any("100% payment after delivery" in r for r in res["reasons"])
+    assert any("10%" in r and "90%" in r for r in res["reasons"])
+
+
 def test_document_agent_packing_and_cepa():
     """Verify packing list carton calculations and CEPA certificate checklist."""
     doc_res = generate_packing_list_and_compliance(
