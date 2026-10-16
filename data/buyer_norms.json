@@ -1,0 +1,22 @@
+{
+  "UAE": {
+    "country_name": "United Arab Emirates",
+    "currency": "AED",
+    "primary_ports": ["Jebel Ali (Dubai)", "Khalifa Port (Abu Dhabi)", "Sharjah Container Terminal"],
+    "working_week": "Monday to Friday (Saturday & Sunday weekend). Note: Friday working hours are usually half-day or observe midday break (12:00 PM – 2:30 PM) for Friday prayers.",
+    "greeting_style": "Polite, formal, and respectful business English. Use 'Dear Mr./Ms. [Last Name]'. Warm cordiality is appreciated before diving into contract details.",
+    "payment_terms": "Standard: 30% advance deposit via TT, 70% against shipping documents (Bill of Lading) or Irrevocable Letter of Credit (LC at Sight) issued by reputable UAE banks (e.g., Emirates NBD, FAB). Invoicing in AED or USD is standard.",
+    "holidays": "Eid al-Fitr, Eid al-Adha, UAE National Day (Dec 2–3), Commemoration Day (Nov 30 / Dec 1), Islamic New Year. During Ramadan, business working hours are reduced by 2 hours daily.",
+    "negotiation_notes": "Buyers appreciate clarity on Incoterms (CIF Jebel Ali or FOB Mumbai/Nhava Sheva). Expect respectful counter-offers and inquiries on sample availability, CEPA duty benefits, and lead-time guarantees."
+  },
+  "Saudi Arabia": {
+    "country_name": "Kingdom of Saudi Arabia",
+    "currency": "SAR",
+    "primary_ports": ["Jeddah Islamic Port", "King Abdulaziz Port (Dammam)"],
+    "working_week": "Sunday to Thursday (Friday & Saturday weekend). Avoid scheduling business calls during Friday prayer hours.",
+    "greeting_style": "Formal and deferential tone. Relationship-building is essential.",
+    "payment_terms": "Confirmed Irrevocable LC at Sight or 30-50% advance TT with balance against B/L.",
+    "holidays": "Foundation Day (Feb 22), Eid al-Fitr, Eid al-Adha, Saudi National Day (Sep 23).",
+    "negotiation_notes": "Value personal trust and certifications (SASO/SABER compliance)."
+  }
+}

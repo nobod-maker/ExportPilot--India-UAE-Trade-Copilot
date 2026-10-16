@@ -1,0 +1,24 @@
+{
+  "updated_at": "2026-10-16T10:00:00Z",
+  "country": "UAE",
+  "articles": [
+    {
+      "title": "India-UAE CEPA Bilateral Non-Oil Trade Surpasses Targets with Preferential Tariff Utilization",
+      "source": "DGFT Trade Intelligence / Ministry of Commerce",
+      "summary": "Exporters of textiles, apparel, agricultural goods, and gems & jewellery utilize preferential duty benefits under India-UAE CEPA. Certificate of Origin issuance streamlined on DGFT electronic portal.",
+      "risk_impact": "Positive: Zero or reduced import tariffs for eligible Indian goods into UAE ports."
+    },
+    {
+      "title": "Jebel Ali Port Operations and DP World Container Flow Stable with Standard Clearance Windows",
+      "source": "Gulf Business Logistics Monitor",
+      "summary": "Maritime freight between western Indian ports (Nhava Sheva, Mundra) and Jebel Ali (Dubai) operating on normal 3 to 5 day transit schedules. No significant congestions reported.",
+      "risk_impact": "Low shipping risk: Predictable delivery timelines for sea cargo."
+    },
+    {
+      "title": "UAE Central Bank Monitors Regional FX Liquidity; USD/AED Peg Remains Solid at 3.6725",
+      "source": "Emirates Financial Wire",
+      "summary": "The UAE Dirham remains steadfastly pegged to the US Dollar, maintaining predictable cross-rates for INR-AED settlements.",
+      "risk_impact": "Low currency risk for AED peg, though INR fluctuations should be buffered with 1.5% to 3.0% margin."
+    }
+  ]
+}

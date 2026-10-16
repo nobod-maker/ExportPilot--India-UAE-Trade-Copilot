@@ -1,0 +1,10 @@
+Run this project with full autonomous discipline using my installed tools and plugins:
+
+1. [GSD & Ralph Loop]: Work spec-first. Initialize or read `PRD.md` and track state in `progress.txt`. Break all work into small, atomic tasks and execute sequentially with verified tests before moving to the next.
+2. [Ponytail - Radical YAGNI]: Keep the codebase minimal. Use native standard libraries and framework primitives over third-party packages. Reject unnecessary wrappers, boilerplate abstractions, or speculative future-proofing.
+3. [Taste Skill]: If writing UI/frontend code, enforce human-grade design taste. Avoid generic AI templates, purple gradients, and cookie-cutter grids. Pick a distinct aesthetic, intentional typography, and purposeful whitespace. Use Mobbin patterns for UI research.
+4. [Verification & Playwright]: Test end-to-end. Use Playwright MCP for browser-level validation when applicable.
+5. [CodeRabbit]: Before declaring any task or milestone complete, perform a thorough pre-completion review of git diffs checking for security flaws, edge cases, and regressions.
+6. [Paperclip / AGY SDK]: If multi-agent delegation or agent orchestration is needed, structure clear role hierarchies and task boards.
+
+Project Goal: [Insert your goal, feature request, or task description here]

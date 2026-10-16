@@ -1,0 +1,41 @@
+# ExportPilot Implementation Progress
+
+Current Phase: Complete (Milestones M1–M6)
+Status: COMPLETED
+Last Updated: 2026-10-16
+
+[x] Phase 1: Core Agent Working End-to-End (M1 + M2)
+    [x] Rules established in AGENTS.md
+    [x] PRD.md created and aligned with user roadmap
+    [x] Git repo initialized, .gitignore & .env.example created
+    [x] requirements.txt created and dependencies verified
+    [x] data/buyer_norms.json populated with comprehensive UAE trade norms
+    [x] agent/tools.py created with get_fx & get_buyer_norms (with cached fallback)
+    [x] agent/prompts.py created with quote extraction & buyer email drafting
+    [x] agent/graph.py created with LangGraph state machine & robust fallback
+    [x] tests/test_tools.py & tests/test_graph.py passing 100%
+    [x] Streamlit app.py baseline operational and serving on port 8501
+
+[x] Phase 2: Vernacular Voice Processing (Voice moved up)
+    [x] agent/voice.py implemented (Tamil, Hindi, English)
+    [x] st.audio_input integrated with persistent typed fallback
+    [x] Language badge, transcript, and translation UI
+    [x] 30 vernacular sample tests in SAMPLE_VERNACULAR_QUERIES
+    [x] tests/test_voice.py passing
+
+[x] Phase 3: Human Approval Gate & Deal Storage (M5)
+    [x] save_deal and SQLite schema (exportpilot.db)
+    [x] Mandatory human click approval gate ("Approve & Save Deal to Archive")
+    [x] Deals history table with inspection modal & CSV export
+    [x] tests/test_db.py passing
+
+[x] Phase 4: Trade News & Risk Engine (M3 with Cached Fallback)
+    [x] get_trade_news with live RSS & cached headlines fallback (cached_trade_news.json)
+    [x] Risk scoring engine (Low, Medium, High) with trade rationales
+    [x] tests/test_risk.py passing
+
+[x] Phase 5: UI Polish, Estimated Impact Panel & Deployment (M6)
+    [x] Executive Taste Skill UI styling (Swiss typographic contrast, zero AI purple gradients)
+    [x] Business impact dashboard with transparent formulas (Estimated FX Volatility Buffer)
+    [x] Comprehensive README.md with Mermaid architecture & Hugging Face Spaces guide
+    [x] CodeRabbit pre-completion security & regression audit conducted
